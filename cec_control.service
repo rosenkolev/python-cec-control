@@ -1,0 +1,11 @@
+[Unit]
+Description=Starts the CEC daemon
+After=systemd-modules-load.service
+
+[Service]
+Type=simple
+ExecStart=bash /usr/lib/python-cec-control/cec.sh
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
