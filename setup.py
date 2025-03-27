@@ -14,10 +14,10 @@ setup(
     name="cec-control",
     version="0.1",
     ext_modules=ext_modules,
-    py_modules=["cli"],
+    py_modules=["cli", "cec"],
     entry_points={
         "console_scripts": [
-            "cec-control = cli:main",  # This creates a CLI command named 'mycli'
+            "cec-control = cli:main",  # This creates a CLI command
         ],
     }
 )

@@ -1,20 +1,28 @@
 from argparse import ArgumentParser
-
-import cec_lib
+from cec import Cec
 
 def main():
     parser = ArgumentParser(description="CLI tool using C++ extension")
     parser.add_argument("-l", "--list", action="store_true", help="List devices")
     args = parser.parse_args()
 
+    interfaces: list[Cec] = Cec.find_cec_devices()
+    
+    print(f"Found {len(interfaces)} CEC interfaces")
+    for cec in interfaces:
+        with cec:
+            print(repr(cec))
+            print("Network Devices:")
+            devices = cec.devices()
+            for dev in devices:
+                print(repr(dev))
+
+    print("---------------")
+    
+    interfaces[0].monitor().wait_for_msgs()
+
     if args.list:
-        print("Listing CEC devices")
-        ints = cec_lib.get_cec_interfaces()
-        for info in ints:
-            print(f"{info.path}\n Adapter: {info.adapter}\n Available Logical Address: {info.available_logical_address}\n Logical Address: {info.logical_address}\n Physical Address {info.physical_address}\n Mask: {info.logical_address_mask}\n Caps: {info.caps}")
-            devs = cec_lib.get_devices(info)
-            for dev in devs:
-                print(f"Devica Physical Address: {dev.physical_address}")
+        pass
 
     print("DONE")
     
