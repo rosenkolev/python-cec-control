@@ -13,15 +13,29 @@
 
 #include "cec_lib.h"
 
-#define CEC_EVENT_FL_INITIAL_STATE	(1 << 0)
-#define CEC_EVENT_FL_DROPPED_EVENTS	(1 << 1)
 #define VENDOR_ID_HTNG 0x00d38d
+#define cec_phys_addr_exp(pa) \
+        ((pa) >> 12), ((pa) >> 8) & 0xf, ((pa) >> 4) & 0xf, (pa) & 0xf
+
+template<typename ... Args>
+std::string string_format( const std::string& format, Args ... args )
+{
+    int size_s = std::snprintf( nullptr, 0, format.c_str(), args ... ) + 1; // Extra space for '\0'
+    if( size_s <= 0 ){ throw std::runtime_error( "Error during formatting." ); }
+    auto size = static_cast<size_t>( size_s );
+    auto buf = std::make_unique<char[]>( size );
+    std::snprintf( buf.get(), size, format.c_str(), args ... );
+    return std::string( buf.get(), buf.get() + size - 1 ); // We don't want the '\0' inside
+}
 
 bool _io_ctl(const int fd, unsigned long int req, void *parm) {
     bool ret_val = false;
     if (fd >= 0) {
         int err = ioctl(fd, req, parm);
         ret_val = err == 0;
+        if (!ret_val) {
+            printf("error: %s\n", strerror(errno));
+        }
     }
     return ret_val;
 }
@@ -41,7 +55,9 @@ bool _cec_info(const int fd, struct CecInfo *info) {
     info->available_log_addrs = caps.available_log_addrs;
     info->adapter = std::string(caps.driver) + " (" + caps.name + ")";
     info->phys_addr = phys_addr;
+    info->phys_addr_txt = string_format("%x.%x.%x.%x", cec_phys_addr_exp(phys_addr));
     info->log_addrs = laddrs.num_log_addrs;
+    info->osd_name = std::string(laddrs.osd_name);
     info->log_addr_mask = laddrs.log_addr_mask;
     return true;
 }
@@ -51,16 +67,26 @@ static bool _send_msg(CecRef *cec, unsigned char dest, cec_msg *msg) {
     return _io_ctl(cec->fd, CEC_TRANSMIT, msg);
 }
 
-static inline bool _cec_msg_is_ok(const struct cec_msg *msg) {
-    return
-        (msg->tx_status & CEC_TX_STATUS_OK) ||
-        (msg->rx_status & CEC_RX_STATUS_OK);
+static inline std::string _cec_type_to_string(CecDeviceType type) {
+    switch (type) {
+        case CecDeviceType::TV:
+            return "TV";
+        case CecDeviceType::Record:
+            return "Record";
+        case CecDeviceType::Playback:
+            return "Playback";
+        case CecDeviceType::Tuner:
+            return "Tuner";
+        case CecDeviceType::Audio:
+            return "Audio System";
+        case CecDeviceType::Processor:
+            return "Processor";
+        default:
+            return "TV";
+    }
 }
 
 // TEST
-
-#define cec_phys_addr_exp(pa) \
-        ((pa) >> 12), ((pa) >> 8) & 0xf, ((pa) >> 4) & 0xf, (pa) & 0xf
 
 const char *cec_la2s(unsigned la) {
     switch (la & 0xf) {
@@ -204,25 +230,6 @@ CecRef open_cec(std::string device_path) {
     return ref;
 }
 
-
-// std::vector<CecInfo> ext_get_cec_interfaces() {
-//     std::vector<CecInterface> devices = {};
-//     std::vector<std::string> device_paths = find_cec_devices();
-//     for (const auto& device_path : device_paths) {
-//         CecInterface info;
-//         info.device_path = device_path;
-
-//         int fd = open(device_path.c_str(), O_RDWR);
-//         bool is_valid = cec_info(fd, &info);
-//         close(fd);
-//         if (is_valid) {
-//             devices.push_back(info);
-//         }
-//     }
-    
-//     return devices;
-// }
-
 std::vector<CecNetworkDevice> detect_devices(CecRef *cec) {
     std::vector<CecNetworkDevice> devices = {};
     if (cec != nullptr &&
@@ -236,7 +243,7 @@ std::vector<CecNetworkDevice> detect_devices(CecRef *cec) {
                 continue;
             }
 
-            if (_cec_msg_is_ok(&msg)) {
+            if (cec_msg_status_is_ok(&msg)) {
                 CecNetworkDevice device = {};
                 device.phys_addr = i;
                 device.cec_info = cec->info;
@@ -248,6 +255,80 @@ std::vector<CecNetworkDevice> detect_devices(CecRef *cec) {
     return devices;
 }
 
+bool set_logical_address(CecRef *cec, CecDeviceType type) {
+    __u8 all_dev_types = 0;
+    __u8 prim_type = 0xff;
+    unsigned la_type;
+    struct cec_log_addrs laddrs = {};
+
+    if (cec != nullptr && 
+        cec->isOpen() &&
+        cec->can_set_log_addr &&
+        _io_ctl(cec->fd, CEC_ADAP_S_LOG_ADDRS, &laddrs)) {
+        // unregister only
+        if (type == CecDeviceType::Unregistered) {
+            return true;
+        }
+
+        memset(&laddrs, 0, sizeof(laddrs));  // reset the struct
+        
+        // set name
+        std::string osd_name = _cec_type_to_string(type);
+        strncpy(laddrs.osd_name, osd_name.c_str(), sizeof(laddrs.osd_name));
+        laddrs.osd_name[sizeof(laddrs.osd_name) - 1] = 0;
+
+        laddrs.vendor_id = 0x000c03; // HDMI
+        laddrs.cec_version = CEC_OP_CEC_VERSION_2_0; // CEC_OP_CEC_VERSION_1_4; CEC_OP_CEC_VERSION_2_0
+
+        switch (type) {
+            case CecDeviceType::TV:
+                prim_type = CEC_OP_PRIM_DEVTYPE_TV;
+                la_type = CEC_LOG_ADDR_TYPE_TV;
+                all_dev_types |= CEC_OP_ALL_DEVTYPE_TV;
+                break;
+            case CecDeviceType::Record:
+                prim_type = CEC_OP_PRIM_DEVTYPE_RECORD;
+                la_type = CEC_LOG_ADDR_TYPE_RECORD;
+                all_dev_types |= CEC_OP_ALL_DEVTYPE_RECORD;
+                break;
+            case CecDeviceType::Playback:
+                prim_type = CEC_OP_PRIM_DEVTYPE_PLAYBACK;
+                la_type = CEC_LOG_ADDR_TYPE_PLAYBACK;
+                all_dev_types |= CEC_OP_ALL_DEVTYPE_PLAYBACK;
+                break;
+            case CecDeviceType::Tuner:
+                prim_type = CEC_OP_PRIM_DEVTYPE_TUNER;
+                la_type = CEC_LOG_ADDR_TYPE_TUNER;
+                all_dev_types |= CEC_OP_ALL_DEVTYPE_TUNER;
+                break;
+            case CecDeviceType::Audio:
+                prim_type = CEC_OP_PRIM_DEVTYPE_AUDIOSYSTEM;
+                la_type = CEC_LOG_ADDR_TYPE_AUDIOSYSTEM;
+                all_dev_types |= CEC_OP_ALL_DEVTYPE_AUDIOSYSTEM;
+                break;
+            case CecDeviceType::Processor:
+                prim_type = CEC_OP_PRIM_DEVTYPE_PROCESSOR;
+                la_type = CEC_LOG_ADDR_TYPE_SPECIFIC;
+                all_dev_types |= CEC_OP_ALL_DEVTYPE_SWITCH;
+                break;
+            default:
+                la_type = CEC_LOG_ADDR_TYPE_UNREGISTERED;
+                all_dev_types |= CEC_OP_ALL_DEVTYPE_SWITCH;
+                break;
+        }
+
+        laddrs.log_addr_type[0] = la_type;
+        laddrs.primary_device_type[0] = prim_type;
+        laddrs.all_device_types[0] = all_dev_types;
+        laddrs.features[0][0] = 0; // rc_tv | rc_src;
+        laddrs.num_log_addrs = 1;
+
+        bool isSet = _io_ctl(cec->fd, CEC_ADAP_S_LOG_ADDRS, &laddrs);
+        return isSet;
+    }
+
+    return false;
+}
 
 CecBusMonitorRef start_msg_monitor(CecRef *cec) {
     CecBusMonitorRef ref;
@@ -257,18 +338,21 @@ CecBusMonitorRef start_msg_monitor(CecRef *cec) {
 }
 
 CecBusMsg deque_msg(CecBusMonitorRef *ref) {
+    fd_set rd_fds;
+    fd_set ex_fds;
     CecBusMsg cec_msg;
     int res;
     struct timeval tv = { 1, 0 };
-    FD_ZERO(&ref->rd_fds);
-    FD_ZERO(&ref->ex_fds);
-    FD_SET(ref->fd, &ref->rd_fds);
-    FD_SET(ref->fd, &ref->ex_fds);
-    res = select(ref->fd + 1, &ref->rd_fds, nullptr, &ref->ex_fds, &tv);
+
+    FD_ZERO(&rd_fds);
+    FD_ZERO(&ex_fds);
+    FD_SET(ref->fd, &rd_fds);
+    FD_SET(ref->fd, &ex_fds);
+    res = select(ref->fd + 1, &rd_fds, nullptr, &ex_fds, &tv);
     if (res < 0)
 		return cec_msg;
 
-    if (FD_ISSET(ref->fd, &ref->ex_fds)) {
+    if (FD_ISSET(ref->fd, &ex_fds)) {
         struct cec_event ev;
         if (_io_ctl(ref->fd, CEC_DQEVENT, &ev)) {
             // no event pending
@@ -314,7 +398,7 @@ CecBusMsg deque_msg(CecBusMonitorRef *ref) {
         }
     }
 
-    if (FD_ISSET(ref->fd, &ref->rd_fds)) {
+    if (FD_ISSET(ref->fd, &rd_fds)) {
         struct cec_msg msg = { };
         res = _io_ctl(ref->fd, CEC_RECEIVE, &msg);
         if (res == ENODEV) {
@@ -344,92 +428,8 @@ CecBusMsg deque_msg(CecBusMonitorRef *ref) {
             //     printf("\tSequence: %u Rx Timestamp: %s%s\n",
             //         msg.sequence, ts2s(msg.rx_ts).c_str(),
             //         status.c_str());
+            cec_msg.success = true;
         }
     }
     return cec_msg;
-}
-
-/*
-void wait_for_msgs(const int fd, __u32 monitor_time) {
-	fd_set rd_fds;
-	fd_set ex_fds;
-	int fd = node.fd;
-	time_t t;
-
-	fcntl(fd, F_SETFL, fcntl(fd, F_GETFL) | O_NONBLOCK);
-	t = time(nullptr) + monitor_time;
-
-	while (!monitor_time || time(nullptr) < t) {
-		struct timeval tv = { 1, 0 };
-		int res;
-
-		fflush(stdout);
-		FD_ZERO(&rd_fds);
-		FD_ZERO(&ex_fds);
-		FD_SET(fd, &rd_fds);
-		FD_SET(fd, &ex_fds);
-		res = select(fd + 1, &rd_fds, nullptr, &ex_fds, &tv);
-		if (res < 0)
-			break;
-		if (FD_ISSET(fd, &ex_fds)) {
-			struct cec_event ev;
-
-			if (doioctl(&node, CEC_DQEVENT, &ev))
-				continue;
-			log_event(ev, true);
-		}
-		if (FD_ISSET(fd, &rd_fds)) {
-			struct cec_msg msg = { };
-
-			res = doioctl(&node, CEC_RECEIVE, &msg);
-			if (res == ENODEV) {
-				fprintf(stderr, "Device was disconnected.\n");
-				break;
-			}
-			if (!res)
-				show_msg(msg);
-		}
-	}
-}
-
-// void monitor(CancellationToken *token, std:function<void()> on_disconnect) {
-//   while (1) {
-    
-//   }
-// }
-
-*/
-
-PYBIND11_MODULE(cec_lib, m) {
-    pybind11::class_<CecInfo>(m, "CecInfo")
-        .def_readonly("path", &CecInfo::device_path)
-        .def_readonly("adapter", &CecInfo::adapter)
-        .def_readonly("caps", &CecInfo::caps)
-        .def_readonly("available_logical_address", &CecInfo::available_log_addrs)
-        .def_readonly("physical_address", &CecInfo::phys_addr)
-        .def_readonly("logical_address", &CecInfo::log_addrs)
-        .def_readonly("logical_address_mask", &CecInfo::log_addr_mask);
-    
-    pybind11::class_<CecNetworkDevice>(m, "CecNetworkDevice")
-        .def_readonly("physical_address", &CecNetworkDevice::phys_addr);
-
-    pybind11::class_<CecRef>(m, "CecRef")
-        .def_readonly("info", &CecRef::info)
-        .def_readonly("can_transmit", &CecRef::can_transmit)
-        .def_readonly("can_set_logical_address", &CecRef::can_set_log_addr)
-        .def("isOpen", &CecRef::isOpen)
-        .def("hasInfo", &CecRef::hasInfo);
-
-    pybind11::class_<CecBusMonitorRef>(m, "CecBusMonitorRef");
-
-    pybind11::class_<CecBusMsg>(m, "CecBusMsg")
-        .def_readonly("success", &CecBusMsg::success)
-        .def_readonly("disconnected", &CecBusMsg::disconnected);
-
-    m.def("find_cec_devices", &find_cec_devices, "Find CEC devices in /dev/cec*");
-    m.def("open_cec", &open_cec, "Open CEC device for read");
-    m.def("close_cec", &close_cec, "Closes CEC device for read");
-    m.def("detect_devices", &detect_devices, "Detects network devices by a CEC ref");
-    m.def("start_msg_monitor", &start_msg_monitor, "Start listening to a CEC ref");
-    m.def("deque_msg", &deque_msg, "Get a CEC message");
 }

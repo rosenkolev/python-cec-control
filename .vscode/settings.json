@@ -1,4 +1,13 @@
 {
+    "C_Cpp.default.includePath": [
+        "/usr/include/python3.12/",
+        "/home/home/projects/cec-controller/.venv/lib/python3.12/site-packages/pybind11/include/"
+    ],
+    "files.exclude": {
+        ".git/": true,
+        "*.egg-info/": true,
+        //".venv/": true,
+    },
     "files.associations": {
         "array": "cpp",
         "atomic": "cpp",

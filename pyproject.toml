@@ -1,3 +1,18 @@
 [build-system]
 requires = ["setuptools", "wheel", "pybind11"]
 build-backend = "setuptools.build_meta"
+
+[project]
+name = "cec_control"
+version = "0.1.0"
+description = "HDMI-CEC control library"
+authors = [{ name = "Rosen Kolev", email = "rosen.kolev@hotmail.com" }]
+readme = "README.md"
+requires-python = ">=3.7"
+dependencies = []
+
+[project.scripts]
+cec-control = "cec_control.cli:main"
+
+[tool.setuptools.package-data]
+cec_control = ["*.so", "*.pyd"]

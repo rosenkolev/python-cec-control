@@ -1,8 +1,14 @@
+#include <pybind11/stl.h>
 #include <pybind11/pybind11.h>
+
+#ifndef EXTENSION_H
+#define EXTENSION_H
 
 struct CecInfo {
 	std::string device_path;
     std::string adapter;
+    std::string phys_addr_txt;
+    std::string osd_name;
 	unsigned caps;
 	unsigned available_log_addrs;
     unsigned phys_addr;
@@ -31,13 +37,6 @@ struct CecNetworkDevice {
     CecInfo cec_info;
 };
 
-// struct CancellationToken {
-//     bool cancelled;
-//     void cancel() const {
-//         cancelled = true;
-//     }
-// };
-
 struct CecBusMonitorRef {
     int fd;
     fd_set rd_fds;
@@ -49,3 +48,23 @@ struct CecBusMsg {
     bool has_message = false;
     bool disconnected = false;
 };
+
+enum class CecDeviceType {
+    Unregistered,
+    TV,
+    Record,
+    Playback,
+    Tuner,
+    Audio,
+    Processor
+};
+
+std::vector<std::string> find_cec_devices();
+void close_cec(CecRef *ref);
+CecRef open_cec(std::string device_path);
+std::vector<CecNetworkDevice> detect_devices(CecRef *cec);
+CecBusMonitorRef start_msg_monitor(CecRef *cec);
+CecBusMsg deque_msg(CecBusMonitorRef *ref);
+bool set_logical_address(CecRef *cec, CecDeviceType type);
+
+#endif
