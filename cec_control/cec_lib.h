@@ -4,6 +4,12 @@
 #ifndef EXTENSION_H
 #define EXTENSION_H
 
+enum class CecPowerState {
+    ON,
+    OFF,
+    TRANSITION
+};
+
 struct CecInfo {
 	std::string device_path;
     std::string adapter;
@@ -13,6 +19,7 @@ struct CecInfo {
 	unsigned available_log_addrs;
     unsigned phys_addr;
     unsigned log_addrs;
+    unsigned char log_addr;
 	unsigned short log_addr_mask;
 };
 
@@ -33,8 +40,14 @@ struct CecRef {
 };
 
 struct CecNetworkDevice {
-    unsigned phys_addr;
-    CecInfo cec_info;
+    unsigned dev_id;
+};
+
+struct CecNetworkDeviceStatus {
+    __u16 phys_addr;
+    __u16 active_source_phys_addr;
+    std::string phys_addr_text;
+    CecPowerState power_state;
 };
 
 struct CecBusMonitorRef {
@@ -63,6 +76,7 @@ std::vector<std::string> find_cec_devices();
 void close_cec(CecRef *ref);
 CecRef open_cec(std::string device_path);
 std::vector<CecNetworkDevice> detect_devices(CecRef *cec);
+CecNetworkDeviceStatus get_device_status(CecRef *cec, CecNetworkDevice *dev);
 CecBusMonitorRef start_msg_monitor(CecRef *cec);
 CecBusMsg deque_msg(CecBusMonitorRef *ref);
 bool set_logical_address(CecRef *cec, CecDeviceType type);

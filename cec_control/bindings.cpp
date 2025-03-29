@@ -22,11 +22,12 @@ PYBIND11_MODULE(cec_lib, m) {
         .def_readonly("physical_address", &CecInfo::phys_addr)
         .def_readonly("physical_address_text", &CecInfo::phys_addr_txt)
         .def_readonly("osd_name", &CecInfo::osd_name)
-        .def_readonly("logical_address", &CecInfo::log_addrs)
+        .def_readonly("logical_address", &CecInfo::log_addr)
+        .def_readonly("logical_address_count", &CecInfo::log_addrs)
         .def_readonly("logical_address_mask", &CecInfo::log_addr_mask);
     
     pybind11::class_<CecNetworkDevice>(m, "CecNetworkDevice")
-        .def_readonly("physical_address", &CecNetworkDevice::phys_addr);
+        .def_readonly("device_id", &CecNetworkDevice::dev_id);
 
     pybind11::class_<CecRef>(m, "CecRef")
         .def_readonly("info", &CecRef::info)
@@ -44,6 +45,7 @@ PYBIND11_MODULE(cec_lib, m) {
     m.def("open_cec", &open_cec, "Open CEC device for read");
     m.def("close_cec", &close_cec, "Closes CEC device for read");
     m.def("detect_devices", &detect_devices, "Detects network devices by a CEC ref");
+    m.def("get_device_status", &get_device_status, "Get device status (e.g. physical address, power status, etc.)");
     m.def("set_logical_address", &set_logical_address, "Set logical address to the current device");
     m.def("start_msg_monitor", &start_msg_monitor, "Start listening to a CEC ref");
     m.def("deque_msg", &deque_msg, "Get a CEC message");

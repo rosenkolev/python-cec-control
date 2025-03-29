@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include <glob.h>
 #include <linux/cec.h>
+#include <linux/cec-funcs.h>
 
 #include <pybind11/stl.h>
 #include <pybind11/pybind11.h>
@@ -56,8 +57,9 @@ bool _cec_info(const int fd, struct CecInfo *info) {
     info->adapter = std::string(caps.driver) + " (" + caps.name + ")";
     info->phys_addr = phys_addr;
     info->phys_addr_txt = string_format("%x.%x.%x.%x", cec_phys_addr_exp(phys_addr));
-    info->log_addrs = laddrs.num_log_addrs;
     info->osd_name = std::string(laddrs.osd_name);
+    info->log_addrs = laddrs.num_log_addrs;
+    info->log_addr = laddrs.log_addr[0];
     info->log_addr_mask = laddrs.log_addr_mask;
     return true;
 }
@@ -245,14 +247,55 @@ std::vector<CecNetworkDevice> detect_devices(CecRef *cec) {
 
             if (cec_msg_status_is_ok(&msg)) {
                 CecNetworkDevice device = {};
-                device.phys_addr = i;
-                device.cec_info = cec->info;
+                device.dev_id = i;
                 devices.push_back(device);
             }
         }
     }
 
     return devices;
+}
+
+CecNetworkDeviceStatus get_device_status(CecRef *cec, CecNetworkDevice *dev) {
+    struct CecNetworkDeviceStatus status;
+    struct cec_msg msg;
+    __u8 pwr;
+
+    cec_msg_init(&msg, cec->info.log_addr, dev->dev_id);
+	cec_msg_give_physical_addr(&msg, true);
+    if (_io_ctl(cec->fd, CEC_TRANSMIT, &msg) &&
+        cec_msg_status_is_ok(&msg)) {
+        status.phys_addr = (msg.msg[2] << 8) | msg.msg[3];
+        status.phys_addr_text = cec_phys_addr_exp(status.phys_addr);
+    }
+    
+    cec_msg_init(&msg, cec->info.log_addr, dev->dev_id);
+	cec_msg_give_device_power_status(&msg, true);
+    if (_io_ctl(cec->fd, CEC_TRANSMIT, &msg) &&
+        cec_msg_status_is_ok(&msg)) {
+        cec_ops_report_power_status(&msg, &pwr);
+        switch (pwr) {
+            case CEC_OP_POWER_STATUS_ON:
+                status.power_state = CecPowerState::ON;
+                break;
+            case CEC_OP_POWER_STATUS_STANDBY:
+                status.power_state = CecPowerState::OFF;
+                break;
+            default:
+                status.power_state = CecPowerState::TRANSITION;
+        }
+    }
+
+    cec_msg_init(&msg, cec->info.log_addr, dev->dev_id);
+    cec_msg_request_active_source(&msg, true);
+    if (_io_ctl(cec->fd, CEC_TRANSMIT, &msg) &&
+        cec_msg_status_is_ok(&msg)) {
+        __u16 pa;
+        cec_ops_active_source(&msg, &pa);
+        status.active_source_phys_addr = pa;
+    }
+
+    return status;
 }
 
 bool set_logical_address(CecRef *cec, CecDeviceType type) {

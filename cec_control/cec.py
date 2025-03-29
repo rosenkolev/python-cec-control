@@ -22,7 +22,7 @@ class Cec:
     
     @property
     def is_registered(self) -> bool:
-        return self._ref is not None and self._ref.info.logical_address > 0
+        return self._ref is not None and self._ref.info.logical_address_count > 0
 
     def open(self):
         if not self.opened:
@@ -79,7 +79,8 @@ class Cec:
 
             result += (
                 prt("Available Logical Address", x.available_logical_address) +
-                prt("Logical Addresses Count", x.logical_address)
+                prt("Logical Addresses Count", x.logical_address_count) +
+                prt("Logical Address", x.logical_address)
             )
 
         return result
@@ -89,7 +90,7 @@ class CecDevice:
         self._dev = dev
 
     def __repr__(self):
-        return f"Device {self._dev.physical_address}"
+        return f"Device {self._dev.device_id}"
 
 class CecMonitor:
     def __init__(self, mref):
