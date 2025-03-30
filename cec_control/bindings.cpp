@@ -12,6 +12,13 @@ PYBIND11_MODULE(cec_lib, m) {
         .value("Record", CecDeviceType::Record)
         .value("Audio", CecDeviceType::Audio)
         .value("Tuner", CecDeviceType::Tuner)
+        .export_values();
+    
+    pybind11::enum_<CecPowerState>(m, "CecPowerState")
+        .value("UNKNOWN", CecPowerState::UNKNOWN)
+        .value("ON", CecPowerState::ON)
+        .value("OFF", CecPowerState::OFF)
+        .value("TRANSITION", CecPowerState::TRANSITION)
         .export_values(); 
 
     pybind11::class_<CecInfo>(m, "CecInfo")
@@ -27,7 +34,8 @@ PYBIND11_MODULE(cec_lib, m) {
         .def_readonly("logical_address_mask", &CecInfo::log_addr_mask);
     
     pybind11::class_<CecNetworkDevice>(m, "CecNetworkDevice")
-        .def_readonly("device_id", &CecNetworkDevice::dev_id);
+        .def_readonly("device_id", &CecNetworkDevice::dev_id)
+        .def_readonly("device_label", &CecNetworkDevice::dev_txt);
 
     pybind11::class_<CecRef>(m, "CecRef")
         .def_readonly("info", &CecRef::info)
@@ -44,9 +52,16 @@ PYBIND11_MODULE(cec_lib, m) {
     m.def("find_cec_devices", &find_cec_devices, "Find CEC devices in /dev/cec*");
     m.def("open_cec", &open_cec, "Open CEC device for read");
     m.def("close_cec", &close_cec, "Closes CEC device for read");
-    m.def("detect_devices", &detect_devices, "Detects network devices by a CEC ref");
-    m.def("get_device_status", &get_device_status, "Get device status (e.g. physical address, power status, etc.)");
     m.def("set_logical_address", &set_logical_address, "Set logical address to the current device");
+    m.def("detect_devices", &detect_devices, "Detects network devices by a CEC ref");
+    m.def("create_net_device", &create_net_device, "Create a network device");
+    m.def("ping_net_dev", &ping_net_dev, "Ping a network device.");
+    m.def("get_net_dev_physical_addr", &get_net_dev_physical_addr, "Get network device physical address.");
+    m.def("get_net_device_vendor_id", &get_net_device_vendor_id, "Get network device vendor id.");
+    m.def("get_net_device_osd_name", &get_net_device_osd_name, "Get network device OSD name.");
+    m.def("get_net_dev_pwr_state", &get_net_device_pwr_state, "Get network device power state.");
+    m.def("get_net_dev_active_source_phys_addr", &get_net_dev_active_source_phys_addr, "Get network device active source physical address.");
+    m.def("set_net_dev_active_source", &set_net_dev_active_source, "Get network device active source physical address.");
     m.def("start_msg_monitor", &start_msg_monitor, "Start listening to a CEC ref");
     m.def("deque_msg", &deque_msg, "Get a CEC message");
 }

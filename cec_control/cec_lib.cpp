@@ -88,48 +88,24 @@ static inline std::string _cec_type_to_string(CecDeviceType type) {
     }
 }
 
-// TEST
+static int transmit_msg_retry(const int fd, struct cec_msg &msg) {
+	bool from_unreg = cec_msg_initiator(&msg) == CEC_LOG_ADDR_UNREGISTERED;
+	unsigned cnt = 0;
+	bool repeat;
+	int ret;
 
-const char *cec_la2s(unsigned la) {
-    switch (la & 0xf) {
-    case 0:
-        return "TV";
-    case 1:
-        return "Recording Device 1";
-    case 2:
-        return "Recording Device 2";
-    case 3:
-        return "Tuner 1";
-    case 4:
-        return "Playback Device 1";
-    case 5:
-        return "Audio System";
-    case 6:
-        return "Tuner 2";
-    case 7:
-        return "Tuner 3";
-    case 8:
-        return "Playback Device 2";
-    case 9:
-        return "Recording Device 3";
-    case 10:
-        return "Tuner 4";
-    case 11:
-        return "Playback Device 3";
-    case 12:
-        return "Backup 1";
-    case 13:
-        return "Backup 2";
-    case 14:
-        return "Specific";
-    case 15:
-    default:
-        return "Unregistered";
-    }
+	do {
+		ret = _io_ctl(fd, CEC_TRANSMIT, &msg);
+		repeat = ret == ENONET || (ret == EINVAL && from_unreg);
+		if (repeat)
+			usleep(100000);
+	} while (repeat && cnt++ < 10);
+	return ret;
 }
 
-static inline void cec_log_msg(const struct cec_msg *msg)
-{
+// TEST
+
+static inline void cec_log_msg(const struct cec_msg *msg) {
 	__u32 vendor_id;
 	__u16 phys_addr;
 	const __u8 *bytes;
@@ -232,6 +208,15 @@ CecRef open_cec(std::string device_path) {
     return ref;
 }
 
+CecNetworkDevice create_net_device(CecRef *cec, __u8 log_addr) {
+    CecNetworkDevice device = {};
+    device.dev_id = log_addr;
+    device.fd = cec->fd;
+    device.source_log_addr = cec->info.log_addr;
+    device.source_phys_addr = cec->info.phys_addr;
+    return device;
+}
+
 std::vector<CecNetworkDevice> detect_devices(CecRef *cec) {
     std::vector<CecNetworkDevice> devices = {};
     if (cec != nullptr &&
@@ -246,9 +231,7 @@ std::vector<CecNetworkDevice> detect_devices(CecRef *cec) {
             }
 
             if (cec_msg_status_is_ok(&msg)) {
-                CecNetworkDevice device = {};
-                device.dev_id = i;
-                devices.push_back(device);
+                devices.push_back(create_net_device(cec, i));
             }
         }
     }
@@ -256,46 +239,98 @@ std::vector<CecNetworkDevice> detect_devices(CecRef *cec) {
     return devices;
 }
 
-CecNetworkDeviceStatus get_device_status(CecRef *cec, CecNetworkDevice *dev) {
-    struct CecNetworkDeviceStatus status;
+bool ping_net_dev(CecNetworkDevice *dev) {
     struct cec_msg msg;
-    __u8 pwr;
+    cec_msg_init(&msg, dev->source_log_addr, dev->dev_id);
+    return (
+        _io_ctl(dev->fd, CEC_TRANSMIT, &msg) &&
+        cec_msg_status_is_ok(&msg)
+    );
+}
 
-    cec_msg_init(&msg, cec->info.log_addr, dev->dev_id);
+__u16 get_net_dev_physical_addr(CecNetworkDevice *dev) {
+    struct cec_msg msg;
+    __u16 phys_addr;
+    cec_msg_init(&msg, dev->source_log_addr, dev->dev_id);
 	cec_msg_give_physical_addr(&msg, true);
-    if (_io_ctl(cec->fd, CEC_TRANSMIT, &msg) &&
+    if (_io_ctl(dev->fd, CEC_TRANSMIT, &msg) &&
         cec_msg_status_is_ok(&msg)) {
-        status.phys_addr = (msg.msg[2] << 8) | msg.msg[3];
-        status.phys_addr_text = cec_phys_addr_exp(status.phys_addr);
+        phys_addr = (msg.msg[2] << 8) | msg.msg[3];
     }
-    
-    cec_msg_init(&msg, cec->info.log_addr, dev->dev_id);
+
+    return phys_addr;
+}
+
+__u32 get_net_device_vendor_id(CecNetworkDevice *dev) {
+    struct cec_msg msg;
+    __u32 vendor_id;
+    cec_msg_init(&msg, dev->source_log_addr, dev->dev_id);
+	cec_msg_give_device_vendor_id(&msg, true);
+    if (_io_ctl(dev->fd, CEC_TRANSMIT, &msg) &&
+        cec_msg_status_is_ok(&msg)) {
+        vendor_id = msg.msg[2] << 16 | msg.msg[3] << 8 | msg.msg[4];
+    }
+
+    return vendor_id;
+}
+
+std::string get_net_device_osd_name(CecNetworkDevice *dev) {
+    struct cec_msg msg;
+    char osd_name[15];
+    cec_msg_init(&msg, dev->source_log_addr, dev->dev_id);
+	cec_msg_give_osd_name(&msg, true);
+    _io_ctl(dev->fd, CEC_TRANSMIT, &msg);
+    cec_ops_set_osd_name(&msg, osd_name);
+    if (!cec_msg_status_is_ok(&msg)) {
+        std::string err = "NO NAME";
+        strcpy(osd_name, err.c_str());
+    }
+
+    return std::string(osd_name);
+}
+
+CecPowerState get_net_device_pwr_state(CecNetworkDevice *dev) {
+    struct cec_msg msg;
+    CecPowerState state = CecPowerState::UNKNOWN;
+    __u8 pwr;
+    cec_msg_init(&msg, dev->source_log_addr, dev->dev_id);
 	cec_msg_give_device_power_status(&msg, true);
-    if (_io_ctl(cec->fd, CEC_TRANSMIT, &msg) &&
+    if (_io_ctl(dev->fd, CEC_TRANSMIT, &msg) &&
         cec_msg_status_is_ok(&msg)) {
         cec_ops_report_power_status(&msg, &pwr);
         switch (pwr) {
             case CEC_OP_POWER_STATUS_ON:
-                status.power_state = CecPowerState::ON;
+                state = CecPowerState::ON;
                 break;
             case CEC_OP_POWER_STATUS_STANDBY:
-                status.power_state = CecPowerState::OFF;
+                state = CecPowerState::OFF;
                 break;
             default:
-                status.power_state = CecPowerState::TRANSITION;
+                state = CecPowerState::TRANSITION;
         }
     }
 
-    cec_msg_init(&msg, cec->info.log_addr, dev->dev_id);
+    return state;
+}
+
+__u16 get_net_dev_active_source_phys_addr(CecNetworkDevice *dev) {
+    __u16 pa;
+    struct cec_msg msg;
+    cec_msg_init(&msg, dev->source_log_addr, dev->dev_id);
     cec_msg_request_active_source(&msg, true);
-    if (_io_ctl(cec->fd, CEC_TRANSMIT, &msg) &&
+    if (_io_ctl(dev->fd, CEC_TRANSMIT, &msg) &&
         cec_msg_status_is_ok(&msg)) {
-        __u16 pa;
         cec_ops_active_source(&msg, &pa);
-        status.active_source_phys_addr = pa;
     }
 
-    return status;
+    return pa;
+}
+
+bool set_net_dev_active_source(CecNetworkDevice *dev, __u16 phys_addr) {
+    struct cec_msg msg;
+    cec_msg_init(&msg, dev->source_phys_addr, dev->dev_id);
+    cec_msg_active_source(&msg, phys_addr);
+    return !transmit_msg_retry(dev->fd, msg);
 }
 
 bool set_logical_address(CecRef *cec, CecDeviceType type) {
@@ -375,8 +410,16 @@ bool set_logical_address(CecRef *cec, CecDeviceType type) {
 
 CecBusMonitorRef start_msg_monitor(CecRef *cec) {
     CecBusMonitorRef ref;
+    __u32 monitor = CEC_MODE_MONITOR;
     ref.fd = cec->fd;
-    fcntl(ref.fd, F_SETFL, fcntl(ref.fd, F_GETFL) | O_NONBLOCK);
+    if (_io_ctl(cec->fd, CEC_S_MODE, &monitor)) {
+        fcntl(ref.fd, F_SETFL, fcntl(ref.fd, F_GETFL) | O_NONBLOCK);
+        ref.success = true;
+	}
+    else {
+        fprintf(stderr, "Selecting monitor mode failed, you may have to run this as root.\n");
+    }
+
     return ref;
 }
 
@@ -397,7 +440,7 @@ CecBusMsg deque_msg(CecBusMonitorRef *ref) {
 
     if (FD_ISSET(ref->fd, &ex_fds)) {
         struct cec_event ev;
-        if (_io_ctl(ref->fd, CEC_DQEVENT, &ev)) {
+        if (!_io_ctl(ref->fd, CEC_DQEVENT, &ev)) {
             // no event pending
             return cec_msg;
         }
@@ -443,11 +486,7 @@ CecBusMsg deque_msg(CecBusMonitorRef *ref) {
 
     if (FD_ISSET(ref->fd, &rd_fds)) {
         struct cec_msg msg = { };
-        res = _io_ctl(ref->fd, CEC_RECEIVE, &msg);
-        if (res == ENODEV) {
-            cec_msg.disconnected = true;
-        }
-        else if (!res) {
+        if (_io_ctl(ref->fd, CEC_RECEIVE, &msg)) {
             __u8 from = cec_msg_initiator(&msg);
             __u8 to = cec_msg_destination(&msg);
 
@@ -472,6 +511,9 @@ CecBusMsg deque_msg(CecBusMonitorRef *ref) {
             //         msg.sequence, ts2s(msg.rx_ts).c_str(),
             //         status.c_str());
             cec_msg.success = true;
+        }
+        else if (errno == ENODEV) {
+            cec_msg.disconnected = true;
         }
     }
     return cec_msg;

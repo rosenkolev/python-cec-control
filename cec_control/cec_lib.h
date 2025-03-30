@@ -5,6 +5,7 @@
 #define EXTENSION_H
 
 enum class CecPowerState {
+    UNKNOWN,
     ON,
     OFF,
     TRANSITION
@@ -41,19 +42,17 @@ struct CecRef {
 
 struct CecNetworkDevice {
     unsigned dev_id;
-};
-
-struct CecNetworkDeviceStatus {
-    __u16 phys_addr;
-    __u16 active_source_phys_addr;
-    std::string phys_addr_text;
-    CecPowerState power_state;
+    int fd;
+    unsigned source_log_addr;
+    unsigned source_phys_addr;
+    bool active;
 };
 
 struct CecBusMonitorRef {
     int fd;
     fd_set rd_fds;
 	fd_set ex_fds;
+    bool success;
 };
 
 struct CecBusMsg {
@@ -75,10 +74,17 @@ enum class CecDeviceType {
 std::vector<std::string> find_cec_devices();
 void close_cec(CecRef *ref);
 CecRef open_cec(std::string device_path);
+CecNetworkDevice create_net_device(CecRef *cec, __u8 log_addr);
 std::vector<CecNetworkDevice> detect_devices(CecRef *cec);
-CecNetworkDeviceStatus get_device_status(CecRef *cec, CecNetworkDevice *dev);
+__u16 get_net_dev_physical_addr(CecNetworkDevice *dev);
+__u32 get_net_device_vendor_id(CecNetworkDevice *dev);
+std::string get_net_device_osd_name(CecNetworkDevice *dev);
+CecPowerState get_net_device_pwr_state(CecNetworkDevice *dev);
+__u16 get_net_dev_active_source_phys_addr(CecNetworkDevice *dev);
+bool set_net_dev_active_source(CecNetworkDevice *dev, __u16 phys_addr);
+bool ping_net_dev(CecNetworkDevice *dev);
+bool set_logical_address(CecRef *cec, CecDeviceType type);
 CecBusMonitorRef start_msg_monitor(CecRef *cec);
 CecBusMsg deque_msg(CecBusMonitorRef *ref);
-bool set_logical_address(CecRef *cec, CecDeviceType type);
 
 #endif
