@@ -56,9 +56,13 @@ struct CecBusMonitorRef {
 };
 
 struct CecBusMsg {
-    bool success = false;
-    bool has_message = false;
-    bool disconnected = false;
+    bool has_event;
+    bool has_message;
+    bool initial_state;
+    bool lost_events;
+    bool disconnected;
+    bool state_change;
+    unsigned state_change_phys_addr;
 };
 
 enum class CecDeviceType {
@@ -84,6 +88,7 @@ __u16 get_net_dev_active_source_phys_addr(CecNetworkDevice *dev);
 bool set_net_dev_active_source(CecNetworkDevice *dev, __u16 phys_addr);
 bool ping_net_dev(CecNetworkDevice *dev);
 bool set_logical_address(CecRef *cec, CecDeviceType type);
+bool report_net_device_pwr_on(CecNetworkDevice *dev);
 CecBusMonitorRef start_msg_monitor(CecRef *cec);
 CecBusMsg deque_msg(CecBusMonitorRef *ref);
 

@@ -35,7 +35,7 @@ PYBIND11_MODULE(cec_lib, m) {
     
     pybind11::class_<CecNetworkDevice>(m, "CecNetworkDevice")
         .def_readonly("device_id", &CecNetworkDevice::dev_id)
-        .def_readonly("device_label", &CecNetworkDevice::dev_txt);
+        .def_readonly("source_phys_addr", &CecNetworkDevice::source_phys_addr);
 
     pybind11::class_<CecRef>(m, "CecRef")
         .def_readonly("info", &CecRef::info)
@@ -46,7 +46,12 @@ PYBIND11_MODULE(cec_lib, m) {
     pybind11::class_<CecBusMonitorRef>(m, "CecBusMonitorRef");
 
     pybind11::class_<CecBusMsg>(m, "CecBusMsg")
-        .def_readonly("success", &CecBusMsg::success)
+        .def_readonly("has_event", &CecBusMsg::has_event)
+        .def_readonly("has_message", &CecBusMsg::has_message)
+        .def_readonly("initial_state", &CecBusMsg::initial_state)
+        .def_readonly("lost_events", &CecBusMsg::lost_events)
+        .def_readonly("state_change", &CecBusMsg::state_change)
+        .def_readonly("state_change_phys_addr", &CecBusMsg::state_change_phys_addr)
         .def_readonly("disconnected", &CecBusMsg::disconnected);
 
     m.def("find_cec_devices", &find_cec_devices, "Find CEC devices in /dev/cec*");
@@ -62,6 +67,7 @@ PYBIND11_MODULE(cec_lib, m) {
     m.def("get_net_dev_pwr_state", &get_net_device_pwr_state, "Get network device power state.");
     m.def("get_net_dev_active_source_phys_addr", &get_net_dev_active_source_phys_addr, "Get network device active source physical address.");
     m.def("set_net_dev_active_source", &set_net_dev_active_source, "Get network device active source physical address.");
+    m.def("report_net_device_pwr_on", &report_net_device_pwr_on, "Reprot power on state to device.");
     m.def("start_msg_monitor", &start_msg_monitor, "Start listening to a CEC ref");
     m.def("deque_msg", &deque_msg, "Get a CEC message");
 }

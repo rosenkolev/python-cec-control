@@ -81,6 +81,29 @@ class Cec:
     def monitor(self):
         monitor_ref = cec_lib.start_msg_monitor(self._ref)
         return CecMonitor(monitor_ref)
+    
+    def wait_for_source_activation(self, seconds):
+        ref = cec_lib.start_msg_monitor(self._ref)
+        c = WaitCounter()
+        while c.check(seconds):
+            ev = cec_lib.deque_msg(ref)
+            if (ev.initial_state and
+                ev.state_change and
+                ev.state_change_phys_addr == self.physical_address
+                ):
+                return True
+
+        return False
+    
+    def wait_for_any(self, seconds):
+        ref = cec_lib.start_msg_monitor(self._ref)
+        c = WaitCounter()
+        while c.check(seconds):
+            ev = cec_lib.deque_msg(ref)
+            if (ev.has_message):
+                print("msg")
+        
+        print("NO msg")
 
     def __enter__(self):
         self.open()
@@ -152,6 +175,10 @@ class CecDevice:
             self._phys_addr = cec_lib.get_net_dev_physical_addr(self._dev)
         
         return self._phys_addr
+    
+    @property
+    def source_physical_address(self) -> int:
+        return self._dev.source_phys_addr;
 
     @property
     def vendor_id(self) -> int:
@@ -176,11 +203,18 @@ class CecDevice:
     @property
     def active_source(self) -> int:
         return cec_lib.get_net_dev_active_source_phys_addr(self._dev)
+    
+    @property
+    def is_active_source_current_device(self) -> bool:
+        self.active_source == self.source_physical_address
 
     @active_source.setter
     def active_source(self, value: int) -> None:
         if not cec_lib.set_net_dev_active_source(self._dev, value):
             raise Exception(f"{self.label} active source not set to addr {value}")
+
+    def report_power_on(self) -> bool:
+        return cec_lib.report_net_device_pwr_on(self._dev)
 
     def __repr__(self):
         return self._dev.device_id
@@ -188,7 +222,7 @@ class CecDevice:
 class CecMonitor:
     def __init__(self, mref):
         self._ref = mref
-    
+
     def wait_for_msgs(self, seconds=10, max_events=10):
         c = WaitCounter()
         events = []  # Store collected events

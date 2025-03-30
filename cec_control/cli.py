@@ -49,7 +49,12 @@ class CecControl:
             print(f"  - State {tv.power_state}")
             print(f"  - Source {tv.active_source}")
             print("------------------")
-            cec.monitor().wait_for_msgs(seconds=60)
+            if not (tv.is_power_on and tv.is_active_source_current_device):
+                cec.wait_for_source_activation(90)
+                tv.report_power_on()
+
+            cec.wait_for_any(60)
+
             # while counter.check(60):
             #     is_on = tv.is_power_on
             #     print(f"TV is ON {is_on}")

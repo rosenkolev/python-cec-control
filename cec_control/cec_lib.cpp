@@ -408,6 +408,16 @@ bool set_logical_address(CecRef *cec, CecDeviceType type) {
     return false;
 }
 
+bool report_net_device_pwr_on(CecNetworkDevice *dev) {
+    struct cec_msg msg;
+    cec_msg_init(&msg, dev->source_log_addr, dev->dev_id);
+    cec_msg_report_power_status(&msg, CEC_OP_POWER_STATUS_ON);
+    return (
+        _io_ctl(dev->fd, CEC_TRANSMIT, &msg) &&
+        cec_msg_status_is_ok(&msg)
+    );
+}
+
 CecBusMonitorRef start_msg_monitor(CecRef *cec) {
     CecBusMonitorRef ref;
     __u32 monitor = CEC_MODE_MONITOR;
@@ -445,39 +455,33 @@ CecBusMsg deque_msg(CecBusMonitorRef *ref) {
             return cec_msg;
         }
         
-        if (ev.flags & CEC_EVENT_FL_DROPPED_EVENTS) {
-            printf("warn: events were lost \n");
-        }
-        if (ev.flags & CEC_EVENT_FL_INITIAL_STATE) {
-            printf("event: Initial state \n");
-        }
+        cec_msg.has_event = true;
+        cec_msg.lost_events = (ev.flags & CEC_EVENT_FL_DROPPED_EVENTS);
+        cec_msg.initial_state = (ev.flags & CEC_EVENT_FL_INITIAL_STATE);
 
         switch (ev.event) {
             case CEC_EVENT_STATE_CHANGE:
-                printf("Event: State Change: PA: %x.%x.%x.%x, LA mask: 0x%04x, Conn Info: %s\n",
-                        cec_phys_addr_exp(ev.state_change.phys_addr),
-                        ev.state_change.log_addr_mask,
-                        ev.state_change.have_conn_info ? "yes" : "no");
+                cec_msg.state_change = true;
+                cec_msg.state_change_phys_addr = ev.state_change.phys_addr;
                 break;
-            case CEC_EVENT_LOST_MSGS:
-                printf("Event: Lost %d messages\n",
-                           ev.lost_msgs.lost_msgs);
-                break;
-            case CEC_EVENT_PIN_CEC_LOW:
-            case CEC_EVENT_PIN_CEC_HIGH:
-                if (ev.flags & CEC_EVENT_FL_INITIAL_STATE)
-                    printf("Event: CEC Pin %s\n", ev.event == CEC_EVENT_PIN_CEC_HIGH ? "High" : "Low");
-                break;
-            case CEC_EVENT_PIN_HPD_LOW:
-            case CEC_EVENT_PIN_HPD_HIGH:
-                printf("Event: HPD Pin %s\n",
-                           ev.event == CEC_EVENT_PIN_HPD_HIGH ? "High" : "Low");
-                break;
-            case CEC_EVENT_PIN_5V_LOW:
-            case CEC_EVENT_PIN_5V_HIGH:
-                    printf("Event: 5V Pin %s\n",
-                           ev.event == CEC_EVENT_PIN_5V_HIGH ? "High" : "Low");
-                break;
+            // case CEC_EVENT_LOST_MSGS:
+            //     printf("Event: Lost %d messages\n", ev.lost_msgs.lost_msgs);
+            //     break;
+            // case CEC_EVENT_PIN_CEC_LOW:
+            // case CEC_EVENT_PIN_CEC_HIGH:
+            //     if (ev.flags & CEC_EVENT_FL_INITIAL_STATE)
+            //         printf("Event: CEC Pin %s\n", ev.event == CEC_EVENT_PIN_CEC_HIGH ? "High" : "Low");
+            //     break;
+            // case CEC_EVENT_PIN_HPD_LOW:
+            // case CEC_EVENT_PIN_HPD_HIGH:
+            //     printf("Event: HPD Pin %s\n",
+            //                ev.event == CEC_EVENT_PIN_HPD_HIGH ? "High" : "Low");
+            //     break;
+            // case CEC_EVENT_PIN_5V_LOW:
+            // case CEC_EVENT_PIN_5V_HIGH:
+            //         printf("Event: 5V Pin %s\n",
+            //                ev.event == CEC_EVENT_PIN_5V_HIGH ? "High" : "Low");
+            //     break;
             default:
                     printf("Event: Unknown (0x%x)\n", ev.event);
                 break;
@@ -490,10 +494,11 @@ CecBusMsg deque_msg(CecBusMonitorRef *ref) {
             __u8 from = cec_msg_initiator(&msg);
             __u8 to = cec_msg_destination(&msg);
 
+            cec_msg.has_message = true;
             bool transmitted = msg.tx_status != 0;
             printf("%s %s to %s (%d to %d): ",
                 transmitted ? "Transmitted by" : "Received from",
-                cec_la2s(from), to == 0xf ? "all" : cec_la2s(to), from, to);
+                "X", to == 0xf ? "all" : "Y", from, to);
             cec_log_msg(&msg);
             // std::string status;
             // if ((msg.tx_status & ~CEC_TX_STATUS_OK) ||
@@ -510,7 +515,7 @@ CecBusMsg deque_msg(CecBusMonitorRef *ref) {
             //     printf("\tSequence: %u Rx Timestamp: %s%s\n",
             //         msg.sequence, ts2s(msg.rx_ts).c_str(),
             //         status.c_str());
-            cec_msg.success = true;
+            // cec_msg.success = true;
         }
         else if (errno == ENODEV) {
             cec_msg.disconnected = true;
