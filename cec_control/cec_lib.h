@@ -34,10 +34,6 @@ struct CecRef {
     bool isOpen() const {
         return fd >= 0;
     }
-
-    bool hasInfo() const {
-        return !info.device_path.empty();
-    }
 };
 
 struct CecNetworkDevice {
@@ -48,21 +44,20 @@ struct CecNetworkDevice {
     bool active;
 };
 
-struct CecBusMonitorRef {
-    int fd;
-    fd_set rd_fds;
-	fd_set ex_fds;
-    bool success;
-};
-
 struct CecBusMsg {
     bool has_event;
-    bool has_message;
     bool initial_state;
-    bool lost_events;
-    bool disconnected;
     bool state_change;
     unsigned state_change_phys_addr;
+    bool lost_events;
+    bool msg;
+    __u8 msg_from;
+    __u8 msg_to;
+    __u8 msg_status;
+    __u8 msg_code;
+    __u8 msg_address;
+    __u8 msg_cmd;
+    bool disconnected;
 };
 
 enum class CecDeviceType {
@@ -78,6 +73,8 @@ enum class CecDeviceType {
 std::vector<std::string> find_cec_devices();
 void close_cec(CecRef *ref);
 CecRef open_cec(std::string device_path);
+bool set_logical_address(CecRef *cec, CecDeviceType type);
+bool update_logical_address_info(CecRef *ref);
 CecNetworkDevice create_net_device(CecRef *cec, __u8 log_addr);
 std::vector<CecNetworkDevice> detect_devices(CecRef *cec);
 __u16 get_net_dev_physical_addr(CecNetworkDevice *dev);
@@ -87,9 +84,8 @@ CecPowerState get_net_device_pwr_state(CecNetworkDevice *dev);
 __u16 get_net_dev_active_source_phys_addr(CecNetworkDevice *dev);
 bool set_net_dev_active_source(CecNetworkDevice *dev, __u16 phys_addr);
 bool ping_net_dev(CecNetworkDevice *dev);
-bool set_logical_address(CecRef *cec, CecDeviceType type);
 bool report_net_device_pwr_on(CecNetworkDevice *dev);
-CecBusMonitorRef start_msg_monitor(CecRef *cec);
-CecBusMsg deque_msg(CecBusMonitorRef *ref);
+bool get_msg_init(CecRef *cec);
+CecBusMsg get_msg(CecRef *cec);
 
 #endif

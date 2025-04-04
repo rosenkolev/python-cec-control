@@ -15,10 +15,10 @@ PYBIND11_MODULE(cec_lib, m) {
         .export_values();
     
     pybind11::enum_<CecPowerState>(m, "CecPowerState")
-        .value("UNKNOWN", CecPowerState::UNKNOWN)
-        .value("ON", CecPowerState::ON)
-        .value("OFF", CecPowerState::OFF)
-        .value("TRANSITION", CecPowerState::TRANSITION)
+        .value("Unknown", CecPowerState::UNKNOWN)
+        .value("On", CecPowerState::ON)
+        .value("Off", CecPowerState::OFF)
+        .value("Transition", CecPowerState::TRANSITION)
         .export_values(); 
 
     pybind11::class_<CecInfo>(m, "CecInfo")
@@ -43,12 +43,16 @@ PYBIND11_MODULE(cec_lib, m) {
         .def_readonly("can_set_logical_address", &CecRef::can_set_log_addr)
         .def("isOpen", &CecRef::isOpen);
 
-    pybind11::class_<CecBusMonitorRef>(m, "CecBusMonitorRef");
-
     pybind11::class_<CecBusMsg>(m, "CecBusMsg")
         .def_readonly("has_event", &CecBusMsg::has_event)
-        .def_readonly("has_message", &CecBusMsg::has_message)
+        .def_readonly("has_message", &CecBusMsg::msg)
         .def_readonly("initial_state", &CecBusMsg::initial_state)
+        .def_readonly("message_from", &CecBusMsg::msg_from)
+        .def_readonly("message_to", &CecBusMsg::msg_to)
+        .def_readonly("message_status", &CecBusMsg::msg_status)
+        .def_readonly("message_code", &CecBusMsg::msg_code)
+        .def_readonly("message_address", &CecBusMsg::msg_address)
+        .def_readonly("message_command", &CecBusMsg::msg_cmd)
         .def_readonly("lost_events", &CecBusMsg::lost_events)
         .def_readonly("state_change", &CecBusMsg::state_change)
         .def_readonly("state_change_phys_addr", &CecBusMsg::state_change_phys_addr)
@@ -58,6 +62,7 @@ PYBIND11_MODULE(cec_lib, m) {
     m.def("open_cec", &open_cec, "Open CEC device for read");
     m.def("close_cec", &close_cec, "Closes CEC device for read");
     m.def("set_logical_address", &set_logical_address, "Set logical address to the current device");
+    m.def("update_logical_address_info", &update_logical_address_info, "Update CEC logical address information.");
     m.def("detect_devices", &detect_devices, "Detects network devices by a CEC ref");
     m.def("create_net_device", &create_net_device, "Create a network device");
     m.def("ping_net_dev", &ping_net_dev, "Ping a network device.");
@@ -67,7 +72,7 @@ PYBIND11_MODULE(cec_lib, m) {
     m.def("get_net_dev_pwr_state", &get_net_device_pwr_state, "Get network device power state.");
     m.def("get_net_dev_active_source_phys_addr", &get_net_dev_active_source_phys_addr, "Get network device active source physical address.");
     m.def("set_net_dev_active_source", &set_net_dev_active_source, "Get network device active source physical address.");
-    m.def("report_net_device_pwr_on", &report_net_device_pwr_on, "Reprot power on state to device.");
-    m.def("start_msg_monitor", &start_msg_monitor, "Start listening to a CEC ref");
-    m.def("deque_msg", &deque_msg, "Get a CEC message");
+    m.def("report_net_device_pwr_on", &report_net_device_pwr_on, "Report power on state to device.");
+    m.def("get_msg_init", &get_msg_init, "Start listening to a CEC ref");
+    m.def("get_msg", &get_msg, "Get a CEC message");
 }
