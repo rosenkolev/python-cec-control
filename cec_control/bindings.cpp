@@ -72,6 +72,7 @@ PYBIND11_MODULE(cec_lib, m) {
     m.def("get_net_dev_pwr_state", &get_net_device_pwr_state, "Get network device power state.");
     m.def("get_net_dev_active_source_phys_addr", &get_net_dev_active_source_phys_addr, "Get network device active source physical address.");
     m.def("set_net_dev_active_source", &set_net_dev_active_source, "Get network device active source physical address.");
+    m.def("request_active_source", &request_active_source, "Request network device active source.");
     m.def("report_net_device_pwr_on", &report_net_device_pwr_on, "Report power on state to device.");
     m.def("get_msg_init", &get_msg_init, "Start listening to a CEC ref");
     m.def("get_msg", &get_msg, "Get a CEC message");

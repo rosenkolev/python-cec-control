@@ -8,6 +8,7 @@ from .cec_lib_types import (
     VENDORS,
     CecDeviceType,
     CecMessage,
+    CecMessageRxStatus,
     CecMessageType,
     CecNetworkDevice,
     CecNetworkDeviceType,
@@ -34,6 +35,10 @@ class CancellationToken:
 
 def to_kv_str(key: str, val: str, spaces=4, line=True):
     return (" " * spaces) + key + ": " + val + ("\n" if line else "")
+
+
+def addr_to_str(addr: int) -> str:
+    return f"{addr >> 12}.{(addr >> 8) & 15}.{(addr >> 4) & 15}.{addr  & 15}"
 
 
 class Cec:
@@ -111,7 +116,10 @@ class Cec:
             result += (
                 to_kv_str("Adapter", x.adapter)
                 + to_kv_str("Name", x.osd_name)
-                + to_kv_str("Physical Address", x.physical_address_text)
+                + to_kv_str(
+                    "Physical Address",
+                    f"{addr_to_str(x.physical_address)} ({x.physical_address})",
+                )
                 + "    Capabilities:\n"
             )
 
@@ -121,9 +129,13 @@ class Cec:
                 result += (" " * 8) + "Logical Address\n"
 
             result += (
-                to_kv_str("Available Logical Address", x.available_logical_address)
-                + to_kv_str("Logical Addresses Count", x.logical_address_count)
-                + to_kv_str("Logical Address", x.logical_address)
+                to_kv_str(
+                    "Available Logical Address", x.available_logical_address.__str__()
+                )
+                + to_kv_str(
+                    "Logical Addresses Count", x.logical_address_count.__str__()
+                )
+                + to_kv_str("Logical Address", x.logical_address.__str__())
             )
 
         return result
@@ -198,15 +210,18 @@ class CecDevice:
     def is_active(self) -> bool:
         return cec_lib.ping_net_dev(self._dev)
 
-    @property
-    def active_source(self) -> int:
-        return cec_lib.get_net_dev_active_source_phys_addr(self._dev)
+    # @property
+    # def active_source(self) -> int:
+    #     return cec_lib.get_net_dev_active_source_phys_addr(self._dev)
 
-    @property
-    def is_active_source_current_device(self) -> bool:
-        self.active_source == self.source_physical_address
+    # @property
+    # def is_active_source_current_device(self) -> bool:
+    #     self.active_source == self.source_physical_address
 
-    def report_cec_active_source(self, addr=None):
+    def request_active_source(self) -> bool:
+        return cec_lib.request_active_source(self._dev)
+
+    def report_cec_active_source(self, addr=None) -> bool:
         if addr is None:
             addr = self.source_physical_address
 
@@ -218,12 +233,11 @@ class CecDevice:
     def __repr__(self):
         type = CecNetworkDeviceType(self._dev.device_id)
         return (
-            f"{type.name} ({type.value})"
+            f"{type.name} ({type.value})\n"
             + to_kv_str("Name", self.osd_name)
-            + to_kv_str("Physical Address", self.physical_address)
+            + to_kv_str("Physical Address", self.physical_address.__str__())
             + to_kv_str("Vendor", f"{self.vendor_id} ({self.vendor_name})")
-            + to_kv_str("Power State", self.power_state)
-            + to_kv_str("Active Source", self.active_source)
+            + to_kv_str("Power State", self.power_state.__str__())
         )
 
 
@@ -236,49 +250,63 @@ class CecController:
         return (
             msg is not None
             and msg.has_event
-            and (msg.has_message or msg.initial_state or msg.state_change_phys_addr > 0)
+            # and (msg.has_message or msg.initial_state or msg.state_change_phys_addr > 0)
         )
 
     @staticmethod
-    def print_message(msg: CecMessage):
-        cec_val = "Message"
+    def msg_to_str(msg: CecMessage):
+        cec_val = "Message\n"
         if msg.initial_state:
             cec_val += "  Initial State\n"
         if msg.state_change:
-            cec_val += f"  State changed PA: {msg.state_change_phys_addr}\n"
+            cec_val += f"  State changed PA: {addr_to_str(msg.state_change_phys_addr)} {msg.state_change_phys_addr}\n"
         if msg.has_message:
             type = (
                 CecMessageType(msg.message_code)
-                if msg.message_code in CecDeviceType
-                else ""
+                if msg.message_code in CecMessageType._value2member_map_
+                else CecMessageType.Unknown
             )
             cec_val += f"  Message {msg.message_code} ({type}) with status {msg.message_status}\n"
             cec_val += f"    from {msg.message_from} to {msg.message_to}"
-        if msg.message_code == CecMessageType.SetStreamPath.value:
-            cec_val += f"    Address: {msg.message_address}"
-        if (
-            msg.message_code == CecMessageType.UserControlPressed
-            or msg.message_code == CecMessageType.UserControlReleased
-        ):
-            cec_val += f"    Key: {msg.message_address}"
 
-        logging.info(cec_lib)
+            if (
+                msg.message_code == CecMessageType.SetStreamPath.value
+                or msg.message_code == CecMessageType.ActiveSource.value
+            ):
+                cec_val += f"    Address: {msg.message_address}"
+            if (
+                msg.message_code == CecMessageType.UserControlPressed
+                or msg.message_code == CecMessageType.UserControlReleased
+            ):
+                cec_val += f"    Key: {msg.message_address}"
+
+        return cec_val
 
     def __init__(self, cec: Cec, token: CancellationToken = None):
         self._ref = cec._ref
         self._token = token if token is not None else CancellationToken()
+        # init
+        if not cec_lib.get_msg_init(self._ref):
+            raise Exception("Failed to initialize")
 
     def wait_for_cec_message(
         self,
         seconds: int,
         handler: Callable[[CecMessage], bool | None],
         max_count=MAX_TRACE_COUNT,
+        show=False,
     ) -> CecMessage | None:
         c = WaitCounter()
         while self._token.is_running and c.check(seconds, max_count):
             ev: CecMessage = cec_lib.get_msg(self._ref)
-            if CecController.is_cec_message(ev) and handler(ev) is True:
-                return ev
+            if CecController.is_cec_message(ev):
+                if show:
+                    logging.info(CecController.msg_to_str(ev))
+                else:
+                    logging.debug(CecController.msg_to_str(ev))
+
+                if handler(ev) is True:
+                    return ev
 
         return None
 
@@ -296,14 +324,19 @@ class CecController:
             ),
         )
 
-    def handle_input_activation(self, device: CecDevice):
+    def handle_input_activation(self, device: CecDevice) -> bool:
         pwr_msg = self.wait_for_message(CecMessageType.GiveDevicePowerStatus, 1.5)
-        if pwr_msg is not None:
-            device.report_power_on()
+        if pwr_msg is None or not device.report_power_on():
+            logging.warning("No power state exchange")
+            return False
 
         srm_msg = self.wait_for_message(CecMessageType.SetStreamPath, 1.5)
-        if srm_msg is not None:
-            device.report_cec_active_source()
+        if srm_msg is None or not device.report_cec_active_source():
+            logging.warning("No set stream exchange")
+            return False
+
+        device.report_cec_active_source()
+        return True
 
     def handle_remote_pressed(self, seconds, fn: Callable[[CecUserControlKeys], None]):
         def on_message(msg: CecMessage):
@@ -312,5 +345,12 @@ class CecController:
 
         self.wait_for_cec_message(seconds, on_message)
 
-    def trace(self, seconds: int, max_count=MAX_TRACE_COUNT) -> None:
-        self.wait_for_cec_message(seconds, CecController.print_message, max_count)
+    def get_active_source(self, device: CecDevice):
+        if device.request_active_source():
+            msg = self.wait_for_message(CecMessageType.ActiveSource, 2)
+            if msg is not None:
+                logging.info(f"Source {addr_to_str(msg.message_address)}")
+                return msg.message_address
+
+    def trace(self, seconds: int) -> None:
+        self.wait_for_cec_message(seconds, lambda x: False, show=True)

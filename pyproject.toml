@@ -9,7 +9,7 @@ description = "HDMI-CEC control library"
 authors = [{ name = "Rosen Kolev", email = "rosen.kolev@hotmail.com" }]
 readme = "README.md"
 requires-python = ">=3.7"
-dependencies = []
+dependencies = ["python-uinput"]
 
 [project.scripts]
 cec-control = "cec_control.cli:main"

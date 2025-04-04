@@ -104,6 +104,8 @@ class CecMessageType(Enum):
     ReportPhysicalAddress = 132
     SetStreamPath = 134
     ReportPowerStatus = 144
+    ActiveSource = 130
+
 
 
 class CecMessage(Protocol):

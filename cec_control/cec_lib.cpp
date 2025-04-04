@@ -352,6 +352,13 @@ __u16 get_net_dev_active_source_phys_addr(CecNetworkDevice *dev) {
     return pa;
 }
 
+bool request_active_source(CecNetworkDevice *dev) {
+    struct cec_msg msg;
+    cec_msg_init(&msg, dev->source_log_addr, dev->dev_id);
+    cec_msg_request_active_source(&msg, true);
+    return _send_msg_and_status_ok(dev->fd, &msg);
+}
+
 bool set_net_dev_active_source(CecNetworkDevice *dev, __u16 phys_addr) {
     struct cec_msg msg;
     cec_msg_init(&msg, dev->source_log_addr, dev->dev_id);
@@ -430,6 +437,10 @@ CecBusMsg get_msg(CecRef *cec) {
                     break;
                 case CEC_MSG_USER_CONTROL_PRESSED:
                     cec_msg.msg_cmd = msg.msg[2];
+                    break;
+                case CEC_MSG_ACTIVE_SOURCE:
+                    cec_ops_active_source(&msg, &pa);
+                    cec_msg.msg_address = pa;
                     break;
             }
         }

@@ -2,6 +2,7 @@ import atexit
 import logging
 import signal
 import sys
+from threading import Thread
 from argparse import ArgumentParser
 
 from cec_control.cec import (
@@ -74,18 +75,39 @@ class CecControl:
 
             self.attach_on_process_exit()
 
+            logging.info(f"{cec!r}")
             logging.info(f"{tv!r}")
 
-            ctl = CecController(cec, self.token)
+            # logging.info("--------- TRACE ----------")
+            # def threaded_function(cec, token):
+            #     ctl2 = CecController(cec, token)
+            #     ctl2.trace(60)
+
+            # thread =  Thread(target = threaded_function, args = (cec, self.token,), daemon=True)
+            # thread.start()
+            # logging.info("--------- TRACE ----------")
+
             proxy = Keyboard(keymap)
+            ctl = CecController(cec, self.token)
             while self.token.is_running:
-                # start tracking
-                if not (tv.is_power_on and tv.is_active_source_current_device):
+                source = ctl.get_active_source(tv)
+                logging.warning(f"AS: {source} == {cec.physical_address}")
+
+                if not (tv.is_power_on and source == cec.physical_address):
+                    logging.debug("Active source not on current device")
                     if ctl.wait_for_initial_state(30) is None:
                         continue
 
+                    logging.debug("Handle input communication")
                     ctl.handle_input_activation(tv)
+                else:
+                    logging.info("Active source already set")
 
+                if self.token.is_running:
+                    break
+
+                logging.info(f"active-source: {tv.is_active_source_current_device}")
+                logging.debug("Start listening for remote presses")
                 ctl.handle_remote_pressed(
                     3600, lambda key: proxy.emit(key.name)
                 )  # 1 hour
@@ -96,6 +118,7 @@ def main():
     parser.add_argument("-l", "--list", action="store_true", help="List devices")
     parser.add_argument(
         "--debug",
+        dest="level",
         action="store_const",
         default=logging.INFO,
         help="Print debug messages",

@@ -83,6 +83,7 @@ std::string get_net_device_osd_name(CecNetworkDevice *dev);
 CecPowerState get_net_device_pwr_state(CecNetworkDevice *dev);
 __u16 get_net_dev_active_source_phys_addr(CecNetworkDevice *dev);
 bool set_net_dev_active_source(CecNetworkDevice *dev, __u16 phys_addr);
+bool request_active_source(CecNetworkDevice *dev);
 bool ping_net_dev(CecNetworkDevice *dev);
 bool report_net_device_pwr_on(CecNetworkDevice *dev);
 bool get_msg_init(CecRef *cec);
