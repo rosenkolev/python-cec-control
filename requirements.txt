@@ -1,0 +1,5 @@
+pytest
+pytest-asyncio
+coverage
+ruff
+python-uinput>=1.0.1

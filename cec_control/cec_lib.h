@@ -4,13 +4,6 @@
 #ifndef EXTENSION_H
 #define EXTENSION_H
 
-enum class CecPowerState {
-    UNKNOWN,
-    ON,
-    OFF,
-    TRANSITION
-};
-
 struct CecInfo {
 	std::string device_path;
     std::string adapter;
@@ -57,6 +50,7 @@ struct CecBusMsg {
     __u8 msg_code;
     __u8 msg_address;
     __u8 msg_cmd;
+    bool msg_transmitted;
     bool disconnected;
 };
 
@@ -80,12 +74,12 @@ std::vector<CecNetworkDevice> detect_devices(CecRef *cec);
 __u16 get_net_dev_physical_addr(CecNetworkDevice *dev);
 __u32 get_net_device_vendor_id(CecNetworkDevice *dev);
 std::string get_net_device_osd_name(CecNetworkDevice *dev);
-CecPowerState get_net_device_pwr_state(CecNetworkDevice *dev);
-__u16 get_net_dev_active_source_phys_addr(CecNetworkDevice *dev);
-bool set_net_dev_active_source(CecNetworkDevice *dev, __u16 phys_addr);
-bool request_active_source(CecNetworkDevice *dev);
+__u8 get_device_power_status(CecNetworkDevice *dev);
 bool ping_net_dev(CecNetworkDevice *dev);
-bool report_net_device_pwr_on(CecNetworkDevice *dev);
+bool send_msg_report_power_status(CecNetworkDevice *dev);
+bool send_msg_set_stream_path(CecNetworkDevice *dev, __u16 phys_addr);
+bool send_msg_request_active_source(CecNetworkDevice *dev);
+bool send_msg_active_source(CecNetworkDevice *dev, __u16 phys_addr);
 bool get_msg_init(CecRef *cec);
 CecBusMsg get_msg(CecRef *cec);
 

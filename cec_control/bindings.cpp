@@ -13,13 +13,6 @@ PYBIND11_MODULE(cec_lib, m) {
         .value("Audio", CecDeviceType::Audio)
         .value("Tuner", CecDeviceType::Tuner)
         .export_values();
-    
-    pybind11::enum_<CecPowerState>(m, "CecPowerState")
-        .value("Unknown", CecPowerState::UNKNOWN)
-        .value("On", CecPowerState::ON)
-        .value("Off", CecPowerState::OFF)
-        .value("Transition", CecPowerState::TRANSITION)
-        .export_values(); 
 
     pybind11::class_<CecInfo>(m, "CecInfo")
         .def_readonly("path", &CecInfo::device_path)
@@ -53,6 +46,7 @@ PYBIND11_MODULE(cec_lib, m) {
         .def_readonly("message_code", &CecBusMsg::msg_code)
         .def_readonly("message_address", &CecBusMsg::msg_address)
         .def_readonly("message_command", &CecBusMsg::msg_cmd)
+        .def_readonly("message_transmitted", &CecBusMsg::msg_transmitted)
         .def_readonly("lost_events", &CecBusMsg::lost_events)
         .def_readonly("state_change", &CecBusMsg::state_change)
         .def_readonly("state_change_phys_addr", &CecBusMsg::state_change_phys_addr)
@@ -69,11 +63,11 @@ PYBIND11_MODULE(cec_lib, m) {
     m.def("get_net_dev_physical_addr", &get_net_dev_physical_addr, "Get network device physical address.");
     m.def("get_net_device_vendor_id", &get_net_device_vendor_id, "Get network device vendor id.");
     m.def("get_net_device_osd_name", &get_net_device_osd_name, "Get network device OSD name.");
-    m.def("get_net_dev_pwr_state", &get_net_device_pwr_state, "Get network device power state.");
-    m.def("get_net_dev_active_source_phys_addr", &get_net_dev_active_source_phys_addr, "Get network device active source physical address.");
-    m.def("set_net_dev_active_source", &set_net_dev_active_source, "Get network device active source physical address.");
-    m.def("request_active_source", &request_active_source, "Request network device active source.");
-    m.def("report_net_device_pwr_on", &report_net_device_pwr_on, "Report power on state to device.");
+    m.def("get_device_power_status", &get_device_power_status, "Get network device power state.");
+    m.def("send_msg_set_stream_path", &send_msg_set_stream_path, "Set stream path.");
+    m.def("send_msg_active_source", &send_msg_active_source, "Get network device active source physical address.");
+    m.def("send_msg_request_active_source", &send_msg_request_active_source, "Request network device active source.");
+    m.def("send_msg_report_power_status", &send_msg_report_power_status, "Report power on state to device.");
     m.def("get_msg_init", &get_msg_init, "Start listening to a CEC ref");
     m.def("get_msg", &get_msg, "Get a CEC message");
 }

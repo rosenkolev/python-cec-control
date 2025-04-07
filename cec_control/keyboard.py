@@ -1,20 +1,24 @@
 import logging
-from typing import ClassVar, Literal
 
 import uinput
 
-KeyName = Literal["KEY_LEFT", "KEY_UP", "KEY_RIGHT", "KEY_DOWN", "KEY_ENTER", "KEY_ESC"]
-KeyMap = ClassVar[dict[str, KeyName]]
 
 class Keyboard:
-    def __init__(self, keymap: KeyMap):
-        self.keymap = {v: getattr(uinput, v) for k, v in keymap.items() if hasattr(uinput, v)}
-        self.device = uinput.Device(list(self.keymap.values()))
+    def __init__(self, keymap: dict[str, str]):
+        self.keymap = dict({})
+        self.keys = list()
+        for k, v in keymap.items():
+            if hasattr(uinput, v):
+                key = getattr(uinput, v)
+                self.keymap.setdefault(k, key)
+                self.keys.append(key)
 
-    def emit(self, key: str):
-        if key in self.keymap:
-            logging.debug("key = " + key)
-            self.device.emit(self.keymap.get(key), 0)
+        self.device = uinput.Device(self.keys)
+
+    def emit_key(self, key: str):
+        ev = self.keymap.get(key)
+        if ev is not None:
+            self.device.emit_click(ev)
 
     def close(self):
         self.device.destroy()

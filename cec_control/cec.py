@@ -1,14 +1,15 @@
 import logging
-import time
 from typing import Callable
 
 import cec_control.cec_lib as cec_lib
+from cec_control._utils import CancellationToken, MemoryCache, to_enum, Wait
 
 from .cec_lib_types import (
     VENDORS,
     CecDeviceType,
     CecMessage,
     CecMessageRxStatus,
+    CecMessageTxStatus,
     CecMessageType,
     CecNetworkDevice,
     CecNetworkDeviceType,
@@ -16,21 +17,6 @@ from .cec_lib_types import (
     CecRef,
     CecUserControlKeys,
 )
-
-
-class CancellationToken:
-    def __init__(self):
-        self.is_running = True
-        self.action = lambda: logging.warning("No cancellation action")
-
-    @property
-    def is_cancelled(self):
-        return not self.is_running
-
-    def cancel(self):
-        if self.is_running:
-            self.is_running = False
-            self.action()
 
 
 def to_kv_str(key: str, val: str, spaces=4, line=True):
@@ -141,29 +127,9 @@ class Cec:
         return result
 
 
-class WaitCounter:
-    @staticmethod
-    def ts():
-        return time.monotonic()
-
-    def __init__(self):
-        self.start_time = WaitCounter.ts()
-        self.last_check_elapsed = None
-        self.count = 0
-
-    def check(self, seconds: int, max_count=1000000):
-        self.last_check_elapsed = WaitCounter.ts() - self.start_time
-        return self.last_check_elapsed < seconds or self.count < max_count
-
-    def tick(self, sleep_sec=0):
-        if sleep_sec > 0:
-            time.sleep(sleep_sec)
-
-        self.count += 1
-
-
 class CecDevice:
     def __init__(self, dev):
+        self._data = MemoryCache()
         self._dev: CecNetworkDevice = dev
         self._phys_addr: int | None = None
         self._vendor_id: int | None = None
@@ -196,11 +162,18 @@ class CecDevice:
 
     @property
     def osd_name(self) -> str:
-        return cec_lib.get_net_device_osd_name(self._dev)
+        return self._data.get_or_set(
+            "osd_name", lambda: cec_lib.get_net_device_osd_name(self._dev), ttl=0.5
+        )
 
     @property
     def power_state(self) -> CecPowerState:
-        return cec_lib.get_net_dev_pwr_state(self._dev)
+        status = self._data.get_or_set(
+            "power_status", lambda: cec_lib.get_device_power_status(self._dev), ttl=0.5
+        )
+
+        logging.info(f"status: {status}")
+        return to_enum(status, CecPowerState, CecPowerState.Unknown)
 
     @property
     def is_power_on(self):
@@ -210,28 +183,24 @@ class CecDevice:
     def is_active(self) -> bool:
         return cec_lib.ping_net_dev(self._dev)
 
-    # @property
-    # def active_source(self) -> int:
-    #     return cec_lib.get_net_dev_active_source_phys_addr(self._dev)
-
-    # @property
-    # def is_active_source_current_device(self) -> bool:
-    #     self.active_source == self.source_physical_address
+    def set_stream_path(self) -> bool:
+        return cec_lib.send_msg_set_stream_path(self._dev, self.physical_address)
 
     def request_active_source(self) -> bool:
-        return cec_lib.request_active_source(self._dev)
+        return cec_lib.send_msg_request_active_source(self._dev)
 
-    def report_cec_active_source(self, addr=None) -> bool:
+    def report_active_source(self, addr=None) -> bool:
         if addr is None:
             addr = self.source_physical_address
 
-        return cec_lib.set_net_dev_active_source(self._dev, addr)
+        return cec_lib.send_msg_active_source(self._dev, addr)
 
     def report_power_on(self) -> bool:
-        return cec_lib.report_net_device_pwr_on(self._dev)
+        return cec_lib.send_msg_report_power_status(self._dev)
 
     def __repr__(self):
         type = CecNetworkDeviceType(self._dev.device_id)
+
         return (
             f"{type.name} ({type.value})\n"
             + to_kv_str("Name", self.osd_name)
@@ -241,32 +210,30 @@ class CecDevice:
         )
 
 
-MAX_TRACE_COUNT = 1000000
-
-
 class CecController:
     @staticmethod
-    def is_cec_message(msg: CecMessage | None):
-        return (
-            msg is not None
-            and msg.has_event
-            # and (msg.has_message or msg.initial_state or msg.state_change_phys_addr > 0)
-        )
-
-    @staticmethod
     def msg_to_str(msg: CecMessage):
-        cec_val = "Message\n"
+        def addr_info(add):
+            return f"{addr_to_str(add)} ({add})"
+
+        cec_val = "\n"
         if msg.initial_state:
             cec_val += "  Initial State\n"
         if msg.state_change:
-            cec_val += f"  State changed PA: {addr_to_str(msg.state_change_phys_addr)} {msg.state_change_phys_addr}\n"
+            cec_val += f"  State changed PA: {addr_info(msg.state_change_phys_addr)}\n"
         if msg.has_message:
-            type = (
-                CecMessageType(msg.message_code)
-                if msg.message_code in CecMessageType._value2member_map_
-                else CecMessageType.Unknown
+            if msg.message_transmitted and msg.disconnected:
+                cec_val += "  Device was disconnected."
+                return cec_val
+
+            s_code = msg.message_status
+            status = (
+                to_enum(s_code, CecMessageTxStatus, CecMessageTxStatus.Unknown)
+                if msg.message_transmitted
+                else to_enum(s_code, CecMessageRxStatus, CecMessageRxStatus.Unknown)
             )
-            cec_val += f"  Message {msg.message_code} ({type}) with status {msg.message_status}\n"
+            cec_val += "  " + ("Transmitted" if msg.message_transmitted else "Recieved")
+            cec_val += f" {msg.message_code} with status {s_code} ({ status })\n"
             cec_val += f"    from {msg.message_from} to {msg.message_to}"
 
             if (
@@ -285,72 +252,68 @@ class CecController:
     def __init__(self, cec: Cec, token: CancellationToken = None):
         self._ref = cec._ref
         self._token = token if token is not None else CancellationToken()
-        # init
-        if not cec_lib.get_msg_init(self._ref):
-            raise Exception("Failed to initialize")
 
     def wait_for_cec_message(
         self,
         seconds: int,
-        handler: Callable[[CecMessage], bool | None],
-        max_count=MAX_TRACE_COUNT,
+        handler: Callable[[CecMessage, CecMessageType], bool | None],
         show=False,
+        all_msgs=False,
     ) -> CecMessage | None:
-        c = WaitCounter()
-        while self._token.is_running and c.check(seconds, max_count):
-            ev: CecMessage = cec_lib.get_msg(self._ref)
-            if CecController.is_cec_message(ev):
-                if show:
-                    logging.info(CecController.msg_to_str(ev))
-                else:
-                    logging.debug(CecController.msg_to_str(ev))
+        if not cec_lib.get_msg_init(self._ref):
+            logging.error("Failed to initialize")
+            return None
 
-                if handler(ev) is True:
+        c = Wait(seconds)
+        while self._token.is_running and c.waiting:
+            ev: CecMessage = cec_lib.get_msg(self._ref)
+            if ev is not None and (
+                ev.has_event
+                or (ev.has_message and (all_msgs or not ev.message_transmitted))
+            ):
+                type = to_enum(ev.message_code, CecMessageType, CecMessageType.Unknown)
+                msg = f"{c!r}:{type}:{CecController.msg_to_str(ev)}"
+                logging.info(msg) if show else logging.debug(msg)
+                if handler(ev, type) is True:
                     return ev
 
         return None
 
     def wait_for_message(self, type: CecMessageType, seconds: int):
         return self.wait_for_cec_message(
-            seconds, lambda x: x.has_message and CecMessageType(x.message_code) == type
+            seconds, lambda x, msg_type: x.has_message and msg_type == type
         )
 
-    def wait_for_initial_state(self, seconds) -> CecMessage | None:
-        return self.wait_for_cec_message(
-            seconds,
-            lambda x: (
-                x.initial_state
-                and x.state_change_phys_addr == self._ref.info.physical_address
-            ),
-        )
+    def cycle_msg_until(self, seconds, device: CecDevice, type: CecMessageType):
+        def on_message(msg: CecMessage, msg_type: CecDeviceType):
+            if msg.has_message:
+                match msg_type:
+                    case CecMessageType.GiveDevicePowerStatus:
+                        if not device.report_power_on():
+                            logging.error("Unable to report power on")
+                    case CecMessageType.SetStreamPath:
+                        if not device.report_active_source():
+                            logging.error("Unable to report active source")
 
-    def handle_input_activation(self, device: CecDevice) -> bool:
-        pwr_msg = self.wait_for_message(CecMessageType.GiveDevicePowerStatus, 1.5)
-        if pwr_msg is None or not device.report_power_on():
-            logging.warning("No power state exchange")
-            return False
+            return msg_type == type
 
-        srm_msg = self.wait_for_message(CecMessageType.SetStreamPath, 1.5)
-        if srm_msg is None or not device.report_cec_active_source():
-            logging.warning("No set stream exchange")
-            return False
+        return self.wait_for_cec_message(seconds, on_message)
 
-        device.report_cec_active_source()
-        return True
-
-    def handle_remote_pressed(self, seconds, fn: Callable[[CecUserControlKeys], None]):
-        def on_message(msg: CecMessage):
-            if msg.message_code == CecMessageType.UserControlPressed.value:
-                fn(CecUserControlKeys(msg.message_command))
+    def handle_remote_pressed(
+        self, seconds, fn: Callable[[CecUserControlKeys | None], None]
+    ):
+        def on_message(msg: CecMessage, msg_type: CecMessageType):
+            if msg.has_message and msg_type == CecMessageType.UserControlPressed:
+                fn(to_enum(msg.message_command, CecUserControlKeys))
 
         self.wait_for_cec_message(seconds, on_message)
 
     def get_active_source(self, device: CecDevice):
+        logging.debug(f"request active source")
         if device.request_active_source():
-            msg = self.wait_for_message(CecMessageType.ActiveSource, 2)
-            if msg is not None:
-                logging.info(f"Source {addr_to_str(msg.message_address)}")
-                return msg.message_address
+            logging.debug(f"wait active source")
+            next_msg = self.wait_for_cec_message(1.5, lambda x, _: x.initial_state)
+            return None if next_msg is None else next_msg.state_change_phys_addr
 
     def trace(self, seconds: int) -> None:
-        self.wait_for_cec_message(seconds, lambda x: False, show=True)
+        self.wait_for_cec_message(seconds, lambda x, _: False, show=True, all_msgs=True)

@@ -317,60 +317,56 @@ std::string get_net_device_osd_name(CecNetworkDevice *dev) {
     return std::string(osd_name);
 }
 
-CecPowerState get_net_device_pwr_state(CecNetworkDevice *dev) {
+__u8 get_device_power_status(CecNetworkDevice *dev) {
     struct cec_msg msg;
-    CecPowerState state = CecPowerState::UNKNOWN;
-    __u8 pwr;
+    __u8 pwr = 15;
     cec_msg_init(&msg, dev->source_log_addr, dev->dev_id);
 	cec_msg_give_device_power_status(&msg, true);
     if (_send_msg_and_status_ok(dev->fd, &msg)) {
         cec_ops_report_power_status(&msg, &pwr);
-        switch (pwr) {
-            case CEC_OP_POWER_STATUS_ON:
-                state = CecPowerState::ON;
-                break;
-            case CEC_OP_POWER_STATUS_STANDBY:
-                state = CecPowerState::OFF;
-                break;
-            default:
-                state = CecPowerState::TRANSITION;
-        }
     }
 
-    return state;
+    return pwr;
 }
 
-__u16 get_net_dev_active_source_phys_addr(CecNetworkDevice *dev) {
-    __u16 pa;
-    struct cec_msg msg;
-    cec_msg_init(&msg, dev->source_log_addr, dev->dev_id);
-    cec_msg_request_active_source(&msg, true);
-    if (_send_msg_and_status_ok(dev->fd, &msg)) {
-        cec_ops_active_source(&msg, &pa);
-    }
+// __u16 get_net_dev_active_source_phys_addr(CecNetworkDevice *dev) {
+//     __u16 pa;
+//     struct cec_msg msg;
+//     cec_msg_init(&msg, dev->source_log_addr, dev->dev_id);
+//     cec_msg_request_active_source(&msg, true);
+//     if (_send_msg_and_status_ok(dev->fd, &msg)) {
+//         cec_ops_active_source(&msg, &pa);
+//     }
 
-    return pa;
-}
+//     return pa;
+// }
 
-bool request_active_source(CecNetworkDevice *dev) {
-    struct cec_msg msg;
-    cec_msg_init(&msg, dev->source_log_addr, dev->dev_id);
-    cec_msg_request_active_source(&msg, true);
-    return _send_msg_and_status_ok(dev->fd, &msg);
-}
-
-bool set_net_dev_active_source(CecNetworkDevice *dev, __u16 phys_addr) {
-    struct cec_msg msg;
-    cec_msg_init(&msg, dev->source_log_addr, dev->dev_id);
-    cec_msg_active_source(&msg, phys_addr);
-    return !transmit_msg_retry(dev->fd, msg);
-}
-
-bool report_net_device_pwr_on(CecNetworkDevice *dev) {
+bool send_msg_report_power_status(CecNetworkDevice *dev) {
     struct cec_msg msg;
     cec_msg_init(&msg, dev->source_log_addr, dev->dev_id);
     cec_msg_report_power_status(&msg, CEC_OP_POWER_STATUS_ON);
     return _send_msg_and_status_ok(dev->fd, &msg);
+}
+
+bool send_msg_set_stream_path(CecNetworkDevice *dev, __u16 phys_addr) {
+    struct cec_msg msg;
+    cec_msg_init(&msg, dev->source_log_addr, dev->dev_id);
+    cec_msg_set_stream_path(&msg, phys_addr);
+    return _send_msg_and_status_ok(dev->fd, &msg);
+}
+
+bool send_msg_request_active_source(CecNetworkDevice *dev) {
+    struct cec_msg msg;
+    cec_msg_init(&msg, dev->source_log_addr, dev->dev_id);
+    cec_msg_request_active_source(&msg, false);
+    return _send_msg_and_status_ok(dev->fd, &msg);
+}
+
+bool send_msg_active_source(CecNetworkDevice *dev, __u16 phys_addr) {
+    struct cec_msg msg;
+    cec_msg_init(&msg, dev->source_log_addr, dev->dev_id);
+    cec_msg_active_source(&msg, phys_addr);
+    return !transmit_msg_retry(dev->fd, msg);
 }
 
 bool get_msg_init(CecRef *cec) {
@@ -380,9 +376,6 @@ bool get_msg_init(CecRef *cec) {
         fcntl(cec->fd, F_SETFL, fcntl(cec->fd, F_GETFL) | O_NONBLOCK);
         ret_val = true;
 	}
-    else {
-        fprintf(stderr, "Selecting follower mode failed.\n");
-    }
 
     return ret_val;
 }
@@ -424,11 +417,13 @@ CecBusMsg get_msg(CecRef *cec) {
         if (res == ENODEV) {
             cec_msg.disconnected = true;
         }
-        else if (res == 0) {
+        else if (!res) {
+            bool transmitted = msg.tx_status != 0;
             cec_msg.msg = msg.len > 1;
             cec_msg.msg_from = cec_msg_initiator(&msg);
             cec_msg.msg_to = cec_msg_destination(&msg);
-            cec_msg.msg_status = msg.rx_status;
+            cec_msg.msg_transmitted = transmitted;
+            cec_msg.msg_status = transmitted ? msg.tx_status : msg.rx_status;
             cec_msg.msg_code = msg.msg[1];
             switch (msg.msg[1]) {
                 case CEC_MSG_SET_STREAM_PATH:

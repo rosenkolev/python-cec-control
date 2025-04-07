@@ -24,6 +24,5 @@ setup(
     },
     packages=["cec_control"],
     install_requires=["python-uinput>=1.0.1"],
-    tests_require=['pytest'],
     include_package_data=True,
 )

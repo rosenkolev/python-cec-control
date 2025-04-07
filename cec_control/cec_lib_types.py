@@ -32,10 +32,11 @@ class CecNetworkDeviceType(Enum):
 
 
 class CecPowerState(Enum):
-    Unknown = 0
-    On = 1
-    Off = 2
-    Transition = 3
+    Unknown = 15
+    On = 0
+    StandBy = 1
+    ToOn = 2
+    ToStandBy = 3
 
 
 class CecMessageRxStatus(Enum):
@@ -44,6 +45,18 @@ class CecMessageRxStatus(Enum):
     Timeout = 2
     FeatureAbort = 4
     Aborted = 5
+
+
+class CecMessageTxStatus(Enum):
+    Unknown = 0
+    Ok = 1
+    Lost = 2
+    Nack = 4
+    LowDrive = 8
+    Error = 16
+    MaxRetries = 32
+    Aborted = 64
+    Timeout = 128
 
 
 class CecUserControlKeys(Enum):
@@ -107,7 +120,6 @@ class CecMessageType(Enum):
     ActiveSource = 130
 
 
-
 class CecMessage(Protocol):
     has_event: bool
     initial_state: bool
@@ -121,6 +133,7 @@ class CecMessage(Protocol):
     message_code: int
     message_address: int
     message_command: int
+    message_transmitted: bool
     disconnected: bool
 
 

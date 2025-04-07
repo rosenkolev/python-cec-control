@@ -2,7 +2,7 @@ import atexit
 import logging
 import signal
 import sys
-from threading import Thread
+
 from argparse import ArgumentParser
 
 from cec_control.cec import (
@@ -11,15 +11,17 @@ from cec_control.cec import (
     CecController,
     CecDeviceType,
     CecNetworkDeviceType,
+    Wait,
 )
-from cec_control.cec_lib_types import CecUserControlKeys
-from cec_control.keyboard import Keyboard, KeyMap
+from cec_control.cec_lib_types import CecMessageType, CecPowerState, CecUserControlKeys
+from cec_control.keyboard import Keyboard
 
 
 class CecControl:
-    def __init__(self):
+    def __init__(self, keymap: dict):
         self.cec: Cec = None
         self.token = CancellationToken()
+        self.remote = Keyboard(keymap)
 
     @staticmethod
     def print():
@@ -33,7 +35,7 @@ class CecControl:
                     for dev in devices:
                         print(f"        - {dev!r}")
 
-    def init(self):
+    def init_cec(self):
         """Find the TV"""
         interfaces = Cec.find_cec_devices()
         for cec in interfaces:
@@ -62,7 +64,7 @@ class CecControl:
         signal.signal(signal.SIGTERM, on_exit)
         signal.signal(signal.SIGINT, on_exit)
 
-    def start_monitoring_tv(self, keymap: KeyMap):
+    def start_monitoring_tv(self):
         if self.cec is None:
             logging.error("No active CEC device")
             return
@@ -75,47 +77,44 @@ class CecControl:
 
             self.attach_on_process_exit()
 
-            logging.info(f"{cec!r}")
-            logging.info(f"{tv!r}")
+            logging.debug(f"{cec!r}")
+            # logging.debug(f"{tv!r}")
 
-            # logging.info("--------- TRACE ----------")
-            # def threaded_function(cec, token):
-            #     ctl2 = CecController(cec, token)
-            #     ctl2.trace(60)
-
-            # thread =  Thread(target = threaded_function, args = (cec, self.token,), daemon=True)
-            # thread.start()
-            # logging.info("--------- TRACE ----------")
-
-            proxy = Keyboard(keymap)
             ctl = CecController(cec, self.token)
             while self.token.is_running:
-                source = ctl.get_active_source(tv)
-                logging.warning(f"AS: {source} == {cec.physical_address}")
 
-                if not (tv.is_power_on and source == cec.physical_address):
-                    logging.debug("Active source not on current device")
-                    if ctl.wait_for_initial_state(30) is None:
-                        continue
-
-                    logging.debug("Handle input communication")
-                    ctl.handle_input_activation(tv)
+                if not tv.power_state == CecPowerState.On:
+                    logging.debug("Device is OFF")
+                    Wait.for_fn(60, lambda: tv.is_power_on, self.token, sleep_sec=1)
                 else:
-                    logging.info("Active source already set")
+                    logging.debug("Device is ON")
+                    if not ctl.get_active_source(tv) == cec.physical_address:
+                        ev = ctl.cycle_msg_until(30, tv, CecMessageType.SetStreamPath)
+                        if ev is None:
+                            logging.debug("No active source")
+                            continue
+                    else:
+                        logging.debug("Active source already set")
 
-                if self.token.is_running:
-                    break
+                    if not self.token.is_running:
+                        break
 
-                logging.info(f"active-source: {tv.is_active_source_current_device}")
-                logging.debug("Start listening for remote presses")
-                ctl.handle_remote_pressed(
-                    3600, lambda key: proxy.emit(key.name)
-                )  # 1 hour
+                    logging.debug("Start listening for remote presses")
+
+                    ctl.handle_remote_pressed(
+                        3600,
+                        self._handle_key,
+                    )  # 1 hour
+
+    def _handle_key(self, key: CecUserControlKeys | None):
+        if key is not None:
+            self.remote.emit_key(key.name)
 
 
 def main():
     parser = ArgumentParser(description="CLI tool using C++ extension")
     parser.add_argument("-l", "--list", action="store_true", help="List devices")
+    parser.add_argument("-t", "--test", action="store_true", help="Test keyboard")
     parser.add_argument(
         "--debug",
         dest="level",
@@ -132,10 +131,8 @@ def main():
         CecControl.print()
         return
 
-    control = CecControl()
-    control.init()
-    control.start_monitoring_tv(
-        keymap={
+    control = CecControl(
+        {
             CecUserControlKeys.Select.name: "KEY_ENTER",
             CecUserControlKeys.Back.name: "KEY_ESC",
             CecUserControlKeys.Up.name: "KEY_UP",
@@ -144,6 +141,9 @@ def main():
             CecUserControlKeys.Left.name: "KEY_LEFT",
         }
     )
+
+    control.init_cec()
+    control.start_monitoring_tv()
 
 
 if __name__ == "__main__":
