@@ -1,3 +1,10 @@
+# root folder
 /.env/
 /build/
 /*.egg-info/
+
+# python cache
+__pycache__/
+
+# c++ compiles
+*.so
