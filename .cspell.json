@@ -1,0 +1,38 @@
+{
+    "version": "0.2",
+    "language": "en",
+    "ignorePaths": [
+        ".gitignore",
+        ".pytest_cache/",
+        "*.egg-info/",
+        "reports/",
+        "LICENSE",
+        "extensions.json",
+    ],
+    "overrides": [
+        {
+            "filename": ["cec_lib.cpp"],
+            "words": [
+                "HTNG",
+                "ADAP",
+                "AUDIOSYSTEM",
+                "DQEVENT"
+            ]
+        },
+        {
+            "filename": ["requirements.txt", "pyproject.toml"],
+            "words": [
+                "pybind",
+                "pytest",
+                "asyncio",
+                "setuptools"
+            ]
+        }
+    ],
+    "words": [
+        "Rosen",
+        "Kolev",
+        "uinput",
+        "venv"
+    ]
+}

@@ -12,14 +12,15 @@ ext_modules = [
 
 setup(
     name="cec_control",
+    description="A HDMI-CEC host that track CEC messages and control the PC with by the TV remote",
     version="0.1",
     author="Rosen Kolev",
     author_email="rosen.kolev@hotmail.com",
     ext_modules=ext_modules,
-    py_modules=["cec_control.cec"],
+    py_modules=[],
     entry_points={
         "console_scripts": [
-            "cec-control = cec_control.cli:main",  # This creates a CLI command
+            "cec-control = cec_control.main:main",  # This creates a CLI command
         ],
     },
     packages=["cec_control"],

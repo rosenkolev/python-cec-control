@@ -1,9 +1,7 @@
 import atexit
 import logging
 import signal
-import sys
-
-from argparse import ArgumentParser
+from typing import Protocol
 
 from cec_control.cec import (
     CancellationToken,
@@ -14,44 +12,52 @@ from cec_control.cec import (
     Wait,
 )
 from cec_control.cec_lib_types import CecMessageType, CecPowerState, CecUserControlKeys
-from cec_control.keyboard import Keyboard
 
 
-class CecControl:
-    def __init__(self, keymap: dict):
+class OsKeyboardController(Protocol):
+    def __init__(self, keymap: dict[CecUserControlKeys, str]):
+        pass
+
+    def emit_key(key: CecUserControlKeys) -> None:
+        pass
+
+
+class CecCli:
+    def __init__(self, remote: OsKeyboardController):
         self.cec: Cec = None
         self.token = CancellationToken()
-        self.remote = Keyboard(keymap)
+        self.remote = remote
 
     @staticmethod
     def print():
         interfaces = Cec.find_cec_devices()
         for cec in interfaces:
             with cec:
-                print(repr(cec))
+                logging.info(repr(cec))
                 if cec.is_registered:
-                    print("    Network Devices:")
+                    logging.info("    Network Devices:")
                     devices = cec.devices()
                     for dev in devices:
-                        print(f"        - {dev!r}")
+                        logging.info(f"        - {dev!r}")
 
-    def init_cec(self):
-        """Find the TV"""
+    def register_on_network_and_find_device(
+        self, cec_type: CecDeviceType, device_type: CecNetworkDeviceType
+    ):
         interfaces = Cec.find_cec_devices()
         for cec in interfaces:
             with cec:
                 if not cec.is_active_cec:
                     continue
 
-                if not cec.is_registered and not cec.set_type(CecDeviceType.Playback):
+                if not cec.is_registered and not cec.set_type(cec_type):
                     continue
 
                 if not cec.is_registered:
-                    print("Failed to register as playback device")
+                    logging.error("Failed to register as CEC device")
                     continue
 
-                print("Registered as playback device")
-                device = cec.create_device(CecNetworkDeviceType.TV)
+                logging.info("Registered as CEC device")
+                device = cec.create_device(device_type)
                 if device.is_active:
                     self.cec = cec
                     break
@@ -108,43 +114,4 @@ class CecControl:
 
     def _handle_key(self, key: CecUserControlKeys | None):
         if key is not None:
-            self.remote.emit_key(key.name)
-
-
-def main():
-    parser = ArgumentParser(description="CLI tool using C++ extension")
-    parser.add_argument("-l", "--list", action="store_true", help="List devices")
-    parser.add_argument("-t", "--test", action="store_true", help="Test keyboard")
-    parser.add_argument(
-        "--debug",
-        dest="level",
-        action="store_const",
-        default=logging.INFO,
-        help="Print debug messages",
-        const=logging.DEBUG,
-    )
-    args = parser.parse_args()
-
-    logging.basicConfig(stream=sys.stdout, level=args.level)
-
-    if args.list:
-        CecControl.print()
-        return
-
-    control = CecControl(
-        {
-            CecUserControlKeys.Select.name: "KEY_ENTER",
-            CecUserControlKeys.Back.name: "KEY_ESC",
-            CecUserControlKeys.Up.name: "KEY_UP",
-            CecUserControlKeys.Right.name: "KEY_RIGHT",
-            CecUserControlKeys.Down.name: "KEY_DOWN",
-            CecUserControlKeys.Left.name: "KEY_LEFT",
-        }
-    )
-
-    control.init_cec()
-    control.start_monitoring_tv()
-
-
-if __name__ == "__main__":
-    main()
+            self.remote.emit_key(key)

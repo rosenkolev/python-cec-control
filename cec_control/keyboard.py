@@ -2,9 +2,11 @@ import logging
 
 import uinput
 
+from cec_control.cec_lib_types import CecUserControlKeys
 
-class Keyboard:
-    def __init__(self, keymap: dict[str, str]):
+
+class UInputKeyboard:
+    def __init__(self, keymap: dict[CecUserControlKeys, str]):
         self.keymap = dict({})
         self.keys = list()
         for k, v in keymap.items():
@@ -15,11 +17,11 @@ class Keyboard:
 
         self.device = uinput.Device(self.keys)
 
-    def emit_key(self, key: str):
+    def emit_key(self, key: CecUserControlKeys):
         ev = self.keymap.get(key)
         if ev is not None:
             self.device.emit_click(ev)
 
     def close(self):
         self.device.destroy()
-        logging.debug("udevice closed")
+        logging.debug("uinput device closed")

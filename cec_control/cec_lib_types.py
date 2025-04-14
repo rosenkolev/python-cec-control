@@ -1,3 +1,5 @@
+# cspell:ignore Denon, Marantz, Onkyo, Akai, Kardon, Benq, Daewoo, Grundig, Harman, Vizio
+
 from enum import Enum
 from typing import Protocol
 

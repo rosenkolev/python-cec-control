@@ -5,14 +5,25 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "cec_control"
 version = "0.1.0"
-description = "HDMI-CEC control library"
+description = "A HDMI-CEC host that track CEC messages and control the PC with by the TV remote"
 authors = [{ name = "Rosen Kolev", email = "rosen.kolev@hotmail.com" }]
 readme = "README.md"
 requires-python = ">=3.7"
 dependencies = ["python-uinput"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: Unix",
+    "Topic :: Multimedia"
+]
+license = "MIT"
+license-files = ["LICENSE*"]
+
+[project.urls]
+Homepage = "https://github.com/rosenkolev/python-cec-control"
+Issues = "https://github.com/rosenkolev/python-cec-control/issues"
 
 [project.scripts]
-cec-control = "cec_control.cli:main"
+cec-control = "cec_control.main:main"
 
 [tool.setuptools.package-data]
 cec_control = ["*.so", "*.pyd"]

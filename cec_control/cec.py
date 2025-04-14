@@ -2,7 +2,7 @@ import logging
 from typing import Callable
 
 import cec_control.cec_lib as cec_lib
-from cec_control._utils import CancellationToken, MemoryCache, to_enum, Wait
+from cec_control._utils import CancellationToken, MemoryCache, Wait, to_enum
 
 from .cec_lib_types import (
     VENDORS,
@@ -232,7 +232,7 @@ class CecController:
                 if msg.message_transmitted
                 else to_enum(s_code, CecMessageRxStatus, CecMessageRxStatus.Unknown)
             )
-            cec_val += "  " + ("Transmitted" if msg.message_transmitted else "Recieved")
+            cec_val += "  " + ("Transmitted" if msg.message_transmitted else "Received")
             cec_val += f" {msg.message_code} with status {s_code} ({ status })\n"
             cec_val += f"    from {msg.message_from} to {msg.message_to}"
 
@@ -309,9 +309,9 @@ class CecController:
         self.wait_for_cec_message(seconds, on_message)
 
     def get_active_source(self, device: CecDevice):
-        logging.debug(f"request active source")
+        logging.debug("request active source")
         if device.request_active_source():
-            logging.debug(f"wait active source")
+            logging.debug("wait active source")
             next_msg = self.wait_for_cec_message(1.5, lambda x, _: x.initial_state)
             return None if next_msg is None else next_msg.state_change_phys_addr
 

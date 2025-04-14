@@ -6,6 +6,7 @@
     "files.exclude": {
         ".git/": true,
         "*.egg-info/": true,
+        ".pytest_cache/": true
     },
     "files.associations": {
         "array": "cpp",

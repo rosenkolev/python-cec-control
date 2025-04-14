@@ -1,4 +1,3 @@
-import pytest
 from cec_control._utils import MemoryCache, Time, Wait
 
 
@@ -24,7 +23,7 @@ def test__MemoryCache_should_store_val():
     assert cache.has("A") is False
     cache.set("A", 10)
     assert cache.has("A") is True
-    assert cache.get("A") is 10
+    assert cache.get("A") == 10
 
 
 def test__MemoryCache_should_get_set():
@@ -61,7 +60,7 @@ def test__Wait_should_check_time():
 
 
 def test__Wait_should_check_count():
-    with TimeMock() as set_ts:
+    with TimeMock():
         _w = Wait(1, 4)
         _w.tick()
         _w.tick()

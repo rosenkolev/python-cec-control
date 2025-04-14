@@ -1,5 +1,5 @@
 import time
-from typing import Callable, Generic, TypeVar, Any
+from typing import Callable, Generic, TypeVar
 
 MAX_TRACE_COUNT = 1000000
 T = TypeVar("T")
