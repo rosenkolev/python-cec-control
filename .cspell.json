@@ -7,6 +7,8 @@
         "*.egg-info/",
         "reports/",
         "LICENSE",
+        ".cspell.json",
+        ".vscode/settings.json",
         "extensions.json",
     ],
     "overrides": [
