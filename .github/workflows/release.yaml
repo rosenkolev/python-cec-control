@@ -21,11 +21,9 @@ jobs:
         run: sed -i "s/0.1.0/$RELEASE_VERSION/g" pyproject.toml
       - name: Build
         run: python -m build --wheel
-      - name: Test
+      - name: Publish package
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          python3 -m pip install --upgrade auditwheel
-          auditwheel show dist/cec_control-*.whl
-      - name: install twine
-        run: python3 -m pip install --upgrade twine
-      - name: publish test
-        run: python3 -m twine upload --repository testpypi dist/* -u __token__ -p ${{ secrets.TESTPYPI_TOKEN }}
+          pip install twine
+          python -m twine upload --repository-url https://api.github.com/orgs/${{ github.repository_owner }}/packages/pypi/upload dist/*
