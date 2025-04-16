@@ -47,7 +47,7 @@ See [open_cec](#open_cecdevice_path-str---cecref)
 
 - **can_transmit** (*bool*): Can the CEC transmit messages.
 - **can_set_logical_address** (*bool*): Can the CEC set logical address.
-- **isOpen()** (*bool*): Is the CEC device openned.
+- **isOpen()** (*bool*): Is the CEC device opened.
 - **info** (*[CecInfo](#cecinfo)*): CEC device information.
 
 ### CecInfo

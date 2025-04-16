@@ -10,6 +10,7 @@
         ".cspell.json",
         ".vscode/settings.json",
         "extensions.json",
+        ".github/workflows/release.yaml"
     ],
     "overrides": [
         {
