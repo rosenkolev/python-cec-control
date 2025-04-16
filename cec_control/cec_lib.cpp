@@ -18,16 +18,6 @@
 #define cec_phys_addr_exp(pa) \
         ((pa) >> 12), ((pa) >> 8) & 0xf, ((pa) >> 4) & 0xf, (pa) & 0xf
 
-template<typename ... Args>
-std::string string_format( const std::string& format, Args ... args ) {
-    int size_s = std::snprintf( nullptr, 0, format.c_str(), args ... ) + 1; // Extra space for '\0'
-    if( size_s <= 0 ){ throw std::runtime_error( "Error during formatting." ); }
-    auto size = static_cast<size_t>( size_s );
-    auto buf = std::make_unique<char[]>( size );
-    std::snprintf( buf.get(), size, format.c_str(), args ... );
-    return std::string( buf.get(), buf.get() + size - 1 ); // We don't want the '\0' inside
-}
-
 int _io_ctl(const int fd, unsigned long int req, void *parm) {
     int ret_val = 0;
     if (fd >= 0) {
@@ -67,7 +57,6 @@ bool _set_cec_info_caps_and_addr(const int fd, struct CecInfo *info) {
     info->available_log_addrs = caps.available_log_addrs;
     info->adapter = std::string(caps.driver) + " (" + caps.name + ")";
     info->phys_addr = phys_addr;
-    info->phys_addr_txt = string_format("%x.%x.%x.%x", cec_phys_addr_exp(phys_addr));
     
     return true;
 }

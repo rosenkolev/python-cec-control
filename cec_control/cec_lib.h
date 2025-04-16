@@ -7,7 +7,6 @@
 struct CecInfo {
 	std::string device_path;
     std::string adapter;
-    std::string phys_addr_txt;
     std::string osd_name;
 	unsigned caps;
 	unsigned available_log_addrs;

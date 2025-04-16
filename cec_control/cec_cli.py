@@ -11,7 +11,13 @@ from cec_control.cec import (
     CecNetworkDeviceType,
     Wait,
 )
-from cec_control.cec_lib_types import CecMessageType, CecPowerState, CecUserControlKeys
+from cec_control.cec_lib_types import (
+    CecMessage,
+    CecMessageType,
+    CecPowerState,
+    CecUserControlKeys,
+)
+from cec_control._utils import to_enum
 
 
 class OsKeyboardController(Protocol):
@@ -31,14 +37,17 @@ class CecCli:
     @staticmethod
     def print():
         interfaces = Cec.find_cec_devices()
+        info = ""
         for cec in interfaces:
             with cec:
-                logging.info(repr(cec))
+                info += "\n" + repr(cec)
                 if cec.is_registered:
-                    logging.info("    Network Devices:")
+                    info += "\n    Network Devices:\n\n"
                     devices = cec.devices()
                     for dev in devices:
-                        logging.info(f"        - {dev!r}")
+                        info += f"    {dev!r}"
+
+        logging.info(info)
 
     def register_on_network_and_find_device(
         self, cec_type: CecDeviceType, device_type: CecNetworkDeviceType
@@ -94,24 +103,14 @@ class CecCli:
                     Wait.for_fn(60, lambda: tv.is_power_on, self.token, sleep_sec=1)
                 else:
                     logging.debug("Device is ON")
-                    if not ctl.get_active_source(tv) == cec.physical_address:
-                        ev = ctl.cycle_msg_until(30, tv, CecMessageType.SetStreamPath)
-                        if ev is None:
-                            logging.debug("No active source")
-                            continue
-                    else:
-                        logging.debug("Active source already set")
+                    ctl.handle_cec_messages(
+                        1800,
+                        tv,
+                        [CecMessageType.UserControlPressed],
+                        self._handle_pressed_msg,
+                    )  # 30 min
 
-                    if not self.token.is_running:
-                        break
-
-                    logging.debug("Start listening for remote presses")
-
-                    ctl.handle_remote_pressed(
-                        3600,
-                        self._handle_key,
-                    )  # 1 hour
-
-    def _handle_key(self, key: CecUserControlKeys | None):
+    def _handle_pressed_msg(self, msg: CecMessage, type: CecMessageType):
+        key = to_enum(msg.message_command, CecUserControlKeys, None)
         if key is not None:
             self.remote.emit_key(key)

@@ -56,9 +56,9 @@ A C++ extension package wraps Linux Kernel CEC functionality.
 
 #### Methods
 
-* [`find_cec_devices()`](/docs/cec_control__cec_lib.md#find_cec_devices) - Find CEC devices in /dev/cec*.
-* `open_cec(device_path: str)` - Open CEC device for read.
-* `close_cec(cec: CecRef)` - Closes CEC device for read.
+* [`find_cec_devices()`](/docs/cec_control__cec_lib.md#find_cec_devices---liststr) - Find CEC devices in /dev/cec*.
+* [`open_cec(device_path: str)`](/docs/cec_control__cec_lib.md#open_cecdevice_path-str---cecref) - Open CEC device for read.
+* [`close_cec(cec: CecRef)`](/docs/cec_control__cec_lib.md#close_ceccec-cecref---none) - Closes CEC device for read.
 * `set_logical_address(cec: CecRef, type: CecDeviceType)` - Set logical address to the current device.
 * `update_logical_address_info(cec: CecRef)` - Update CEC logical address information.
 * `detect_devices(cec: CecRef)` - Detects network devices by a CEC ref.
@@ -101,7 +101,7 @@ python3 -m venv .venv
 # activate in current shell/terminal
 source .venv/bin/activate
 # install requirements
-pip3 install -r .\requirements.txt
+pip3 install -r ./requirements.txt
 # register paths for the C++ binder
 python -m pybind11 --includes
 ```

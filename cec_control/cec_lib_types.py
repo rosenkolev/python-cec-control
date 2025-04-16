@@ -146,7 +146,6 @@ class CecInfo(Protocol):
     osd_name: str
     available_logical_address: int
     physical_address: int
-    physical_address_text: str
     logical_address: int
     logical_address_count: int
     logical_address_mask: int

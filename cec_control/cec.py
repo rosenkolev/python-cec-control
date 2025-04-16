@@ -1,5 +1,5 @@
 import logging
-from typing import Callable
+from typing import Callable, Literal
 
 import cec_control.cec_lib as cec_lib
 from cec_control._utils import CancellationToken, MemoryCache, Wait, to_enum
@@ -15,7 +15,6 @@ from .cec_lib_types import (
     CecNetworkDeviceType,
     CecPowerState,
     CecRef,
-    CecUserControlKeys,
 )
 
 
@@ -204,7 +203,7 @@ class CecDevice:
         return (
             f"{type.name} ({type.value})\n"
             + to_kv_str("Name", self.osd_name)
-            + to_kv_str("Physical Address", self.physical_address.__str__())
+            + to_kv_str("Physical Address", addr_to_str(self.physical_address))
             + to_kv_str("Vendor", f"{self.vendor_id} ({self.vendor_name})")
             + to_kv_str("Power State", self.power_state.__str__())
         )
@@ -279,12 +278,13 @@ class CecController:
 
         return None
 
-    def wait_for_message(self, type: CecMessageType, seconds: int):
-        return self.wait_for_cec_message(
-            seconds, lambda x, msg_type: x.has_message and msg_type == type
-        )
-
-    def cycle_msg_until(self, seconds, device: CecDevice, type: CecMessageType):
+    def handle_cec_messages(
+        self,
+        seconds,
+        device: CecDevice,
+        types: list[CecMessageType],
+        handler: Callable[[CecMessage, CecDeviceType], Literal[False, None]],
+    ):
         def on_message(msg: CecMessage, msg_type: CecDeviceType):
             if msg.has_message:
                 match msg_type:
@@ -294,24 +294,19 @@ class CecController:
                     case CecMessageType.SetStreamPath:
                         if not device.report_active_source():
                             logging.error("Unable to report active source")
+                    case _:
+                        if msg_type in types and (
+                            msg.message_to is self._ref.info.logical_address
+                            or self._ref.info.physical_address
+                        ):
+                            return handler(msg, msg_type) is False
 
-            return msg_type == type
+            return False
 
         return self.wait_for_cec_message(seconds, on_message)
 
-    def handle_remote_pressed(
-        self, seconds, fn: Callable[[CecUserControlKeys | None], None]
-    ):
-        def on_message(msg: CecMessage, msg_type: CecMessageType):
-            if msg.has_message and msg_type == CecMessageType.UserControlPressed:
-                fn(to_enum(msg.message_command, CecUserControlKeys))
-
-        self.wait_for_cec_message(seconds, on_message)
-
     def get_active_source(self, device: CecDevice):
-        logging.debug("request active source")
         if device.request_active_source():
-            logging.debug("wait active source")
             next_msg = self.wait_for_cec_message(1.5, lambda x, _: x.initial_state)
             return None if next_msg is None else next_msg.state_change_phys_addr
 

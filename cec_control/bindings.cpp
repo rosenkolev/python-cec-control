@@ -20,7 +20,6 @@ PYBIND11_MODULE(cec_lib, m) {
         .def_readonly("caps", &CecInfo::caps)
         .def_readonly("available_logical_address", &CecInfo::available_log_addrs)
         .def_readonly("physical_address", &CecInfo::phys_addr)
-        .def_readonly("physical_address_text", &CecInfo::phys_addr_txt)
         .def_readonly("osd_name", &CecInfo::osd_name)
         .def_readonly("logical_address", &CecInfo::log_addr)
         .def_readonly("logical_address_count", &CecInfo::log_addrs)

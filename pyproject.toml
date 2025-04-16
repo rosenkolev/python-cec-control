@@ -9,10 +9,10 @@ description = "A HDMI-CEC host that track CEC messages and control the PC with b
 authors = [{ name = "Rosen Kolev", email = "rosen.kolev@hotmail.com" }]
 readme = "README.md"
 requires-python = ">=3.7"
-dependencies = ["python-uinput"]
+dependencies = ["python-uinput>=1.0.1"]
 classifiers = [
     "Programming Language :: Python :: 3",
-    "Operating System :: Unix",
+    "Operating System :: POSIX :: Linux",
     "Topic :: Multimedia"
 ]
 license = "MIT"

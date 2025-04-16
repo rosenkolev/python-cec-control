@@ -4,4 +4,6 @@ coverage
 ruff
 setuptools
 pybind11
-python-uinput>=1.0.1
+python-uinput
+wheel
+build

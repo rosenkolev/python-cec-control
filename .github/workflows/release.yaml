@@ -1,0 +1,29 @@
+name: Release
+on:
+  release:
+    types: [published]
+env:
+  RELEASE_VERSION: ${{ github.event.release.tag_name }}
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python ${{ matrix.python-version }}  
+        uses: actions/setup-python@v4  
+        with:  
+          python-version: 3.12
+      - name: Install dependencies  
+        run: pip3 install -r requirements.txt
+      - name: Replace Version
+        run: sed -i "s/0.1.0/$RELEASE_VERSION/g" pyproject.toml
+      - name: Build
+        run: python -m build --wheel
+      - name: Test
+        run: |
+          python3 -m pip install --upgrade auditwheel
+          auditwheel show dist/cec_control-*.whl
+      - name: install twine
+        run: python3 -m pip install --upgrade twine
+      - name: publish test
+        run: python3 -m twine upload --repository testpypi dist/* -u __token__ -p ${{ secrets.TESTPYPI_TOKEN }}
