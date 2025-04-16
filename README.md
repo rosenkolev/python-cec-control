@@ -112,6 +112,18 @@ python -m pybind11 --includes
 pip install . && cec-control
 ```
 
+### Create a service
+
+1. Create a file at /etc/systemd/system/cec_control.service (see [cec_control.service](systemd/cec_control.service))
+1. Start the service
+   ```shell
+   systemctl start cec_control.service
+   ```
+1. Auto-start on boot
+   ```shell
+   systemctl enable cec_control.service
+   ```
+
 ### ROADMAP
 
 * [ ] Add a CLI command for the PC to WAKE the TV
